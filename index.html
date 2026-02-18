@@ -3,159 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Liz 2026 - Manual Mode</title>
+    <title>Liz 2026 - All-in-One Tool</title>
     <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; padding: 15px; background: #f0f2f5; color: #333; }
-        #status { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 6px solid #f9ab00; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; padding: 10px; background: #f0f2f5; margin: 0; }
+        .section { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h3 { margin-top: 0; color: #1a73e8; font-size: 16px; }
         
-        .setup-section { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        textarea { width: 100%; height: 80px; margin-top: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; padding: 5px; }
+        /* Butoane */
+        button { width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 5px; }
+        .btn-blue { background: #1a73e8; color: white; }
+        .btn-orange { background: #f9ab00; color: black; }
+        .btn-purple { background: #673ab7; color: white; }
+        .btn-green { background: #1e8e3e; color: white; margin-top: 10px; }
         
-        #scanner-container { width: 100%; height: 180px; background: #000; border-radius: 12px; margin-bottom: 15px; overflow: hidden; }
+        #scanner-container { width: 100%; height: 160px; background: #000; border-radius: 8px; display: none; margin-bottom: 10px; }
+        textarea { width: 100%; height: 60px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; }
+        #ocr-status { font-size: 12px; color: #666; margin-top: 5px; }
         
-        button { width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 8px; border: none; font-weight: bold; font-size: 16px; cursor: pointer; }
-        .btn-process { background: #607d8b; color: white; padding: 8px; font-size: 12px; }
-        .btn-scan { background: #1a73e8; color: white; }
-        .btn-voice { background: #f9ab00; color: black; border: 2px solid #333; }
-        .btn-save { background: #1e8e3e; color: white; margin-top: 20px; }
-        
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; font-size: 11px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        th { background: #eee; }
     </style>
 </head>
 <body>
 
-    <div id="status">STEP 1: Paste Master List text or try Upload.</div>
+    <div class="section">
+        <h3>1. Setup Data</h3>
+        <button class="btn-orange" onclick="document.getElementById('manualBox').style.display='block'">+ Paste Master List (Text)</button>
+        <div id="manualBox" style="display:none;">
+            <textarea id="manualData" placeholder="Paste CSV rows here..."></textarea>
+            <button onclick="processTextData()" style="background:#666; color:white; padding:5px; font-size:11px;">Process Text</button>
+        </div>
+        <div id="dataStatus" style="font-size:11px; margin-top:5px; font-weight:bold;">Status: Waiting for data...</div>
+    </div>
 
-    <div class="setup-section">
-        <label style="font-size:12px; font-weight:bold;">Option A: Manual Paste CSV Text</label>
-        <textarea id="manualData" placeholder="Paste your Excel/CSV rows here..."></textarea>
-        <button class="btn-process" onclick="processTextData()">PROCESS PASTED TEXT</button>
+    <div class="section">
+        <h3>2. Inventory Methods</h3>
+        <button class="btn-blue" onclick="startScanner()">📷 SCAN BARCODE</button>
+        <div id="scanner-container"></div>
         
         <hr>
         
-        <label style="font-size:12px; font-weight:bold;">Option B: Browser Upload</label>
-        <input type="file" id="fileInput" accept=".csv,text/plain" style="font-size:12px; margin-top:5px;">
+        <button class="btn-purple" onclick="document.getElementById('ocrInput').click()">📝 PHOTO OF HANDWRITTEN LIST</button>
+        <input type="file" id="ocrInput" accept="image/*" capture="environment" style="display:none;">
+        <div id="ocr-status"></div>
     </div>
 
-    <div id="scanner-container"></div>
-
-    <button class="btn-scan" onclick="startScanner()">📷 2. START CAMERA</button>
-    <button class="btn-voice" id="voiceBtn" onclick="startVoiceRecognition()" disabled>🎤 3. VOICE (NAME/QTY)</button>
-    <button class="btn-save" onclick="exportToCSV()">💾 DOWNLOAD FINAL LIST</button>
-
-    <div id="results-table">
-        <table id="stock-table">
-            <thead>
-                <tr>
-                    <th>Product</th>
-                    <th>Qty</th>
-                    <th>Barcode</th>
-                </tr>
-            </thead>
+    <div class="section">
+        <h3>3. Stock List</h3>
+        <table id="stockTable">
+            <thead><tr><th>Item</th><th>Qty</th><th>Barcode/Note</th></tr></thead>
             <tbody></tbody>
         </table>
+        <button class="btn-green" onclick="downloadReport()">💾 DOWNLOAD EXCEL (CSV)</button>
     </div>
 
     <script>
         let masterList = [];
         let finalStock = [];
-        let lastBarcode = "";
 
-        // Manual Data Processing
+        // --- 1. DATA LOGIC ---
         function processTextData() {
             const text = document.getElementById('manualData').value;
-            if(!text) return alert("Please paste some data first!");
-            const rows = text.split('\n');
-            masterList = rows.map(row => row.split(',').map(c => c.trim()));
-            document.getElementById('status').innerText = "SUCCESS: Manual data loaded! Now scan.";
-            document.getElementById('status').style.borderLeftColor = "#1e8e3e";
+            masterList = text.split('\n').map(row => row.split(',').map(c => c.trim()));
+            document.getElementById('dataStatus').innerText = "✅ Data Loaded!";
+            document.getElementById('dataStatus').style.color = "green";
+            document.getElementById('manualBox').style.display = 'none';
         }
 
-        // File Upload Logic (as backup)
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const rows = event.target.result.split('\n');
-                masterList = rows.map(row => row.split(',').map(c => c.trim()));
-                document.getElementById('status').innerText = "SUCCESS: File loaded! Now scan.";
-                document.getElementById('status').style.borderLeftColor = "#1e8e3e";
-            };
-            reader.readAsText(e.target.files[0]);
-        });
-
-        // Scanner Logic
+        // --- 2. BARCODE SCANNER ---
         function startScanner() {
+            document.getElementById('scanner-container').style.display = 'block';
             Quagga.init({
                 inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#scanner-container'), constraints: { facingMode: "environment" } },
                 decoder: { readers: ["ean_reader", "code_128_reader"] }
             }, function(err) {
-                if (!err) {
-                    Quagga.start();
-                    document.getElementById('status').innerText = "Scanner active. Point at barcode.";
-                }
+                if (!err) Quagga.start();
             });
 
             Quagga.onDetected(data => {
-                lastBarcode = data.codeResult.code;
+                let code = data.codeResult.code;
                 Quagga.stop();
+                document.getElementById('scanner-container').style.display = 'none';
                 window.navigator.vibrate(100);
                 
-                // Search in masterList
-                let match = masterList.find(row => row.join('|').includes(lastBarcode));
-                if(match) {
-                    document.getElementById('status').innerHTML = `FOUND: ${match[2]}<br>Say Quantity!`;
-                    document.getElementById('voiceBtn').dataset.mode = "qty_only";
-                    document.getElementById('voiceBtn').dataset.match = JSON.stringify(match);
-                } else {
-                    document.getElementById('status').innerHTML = `NEW ITEM: ${lastBarcode}<br>Say Name and Qty!`;
-                    document.getElementById('voiceBtn').dataset.mode = "all";
+                let match = masterList.find(r => r.join('').includes(code));
+                let name = match ? match[1] : "New Item";
+                let qty = prompt(`Found: ${name}\nEnter Quantity:`, "1");
+                
+                if(qty) {
+                    finalStock.push({ name: name, qty: qty, note: code });
+                    updateTable();
                 }
-                document.getElementById('voiceBtn').disabled = false;
             });
         }
 
-        // Voice Recognition (English)
-        function startVoiceRecognition() {
-            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = 'en-GB';
-            recognition.start();
-
-            recognition.onresult = function(event) {
-                const speech = event.results[0][0].transcript.toLowerCase();
-                const mode = document.getElementById('voiceBtn').dataset.mode;
-                let qtyMatch = speech.match(/\d+/);
-                let qty = qtyMatch ? qtyMatch[0] : 1;
-                let entry = {};
-
-                if (mode === "qty_only") {
-                    let m = JSON.parse(document.getElementById('voiceBtn').dataset.match);
-                    entry = { code: m[0], name: m[2], price: m[4], qty: qty, barcode: lastBarcode };
-                } else {
-                    let name = speech.replace(qty, '').trim().toUpperCase() || "NEW";
-                    entry = { code: "NEW", name: name, price: 0, qty: qty, barcode: lastBarcode };
-                }
-
-                finalStock.push(entry);
+        // --- 3. OCR (PHOTO TO TEXT) ---
+        document.getElementById('ocrInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('ocr-status').innerText = "Processing image... Please wait.";
+            
+            Tesseract.recognize(file, 'eng').then(({ data: { text } }) => {
+                document.getElementById('ocr-status').innerText = "Scan complete!";
+                let lines = text.split('\n').filter(l => l.trim().length > 2);
+                lines.forEach(line => {
+                    finalStock.push({ name: line, qty: "Review", note: "From Photo" });
+                });
                 updateTable();
-                document.getElementById('status').innerText = "Item added. Scan next!";
-                document.getElementById('voiceBtn').disabled = true;
-            };
-        }
+            });
+        });
 
         function updateTable() {
-            const tbody = document.querySelector('#stock-table tbody');
-            tbody.innerHTML = finalStock.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${i.barcode}</td></tr>`).join('');
+            const tbody = document.querySelector('#stockTable tbody');
+            tbody.innerHTML = finalStock.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${i.note}</td></tr>`).join('');
         }
 
-        function exportToCSV() {
-            let csv = "CODE,PRODUCT,QTY,PRICE,BARCODE\n";
-            finalStock.forEach(i => { csv += `${i.code},${i.name},${i.qty},${i.price},'${i.barcode}\n`; });
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'Stock_Report.csv';
+        function downloadReport() {
+            let csv = "Item,Qty,Note\n" + finalStock.map(i => `"${i.name}","${i.qty}","${i.note}"`).join('\n');
+            let blob = new Blob([csv], { type: 'text/csv' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = 'inventory_report.csv';
             a.click();
         }
     </script>
