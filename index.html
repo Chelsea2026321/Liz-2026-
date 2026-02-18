@@ -3,41 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Liz 2026 - Advanced Stock Take</title>
+    <title>Liz 2026 - English Inventory Pro</title>
     <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; }
-        #scanner-container { width: 100%; height: 250px; background: #000; margin-bottom: 10px; border-radius: 8px; overflow: hidden; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        button { padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-scan { background: #007bff; color: white; }
-        .btn-voice { background: #ffc107; color: black; }
-        .btn-save { background: #28a745; color: white; grid-column: span 2; }
-        #status { background: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-size: 0.9em; border-left: 5px solid #007bff; }
-        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.8em; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #eee; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 10px; background: #eceff1; }
+        #scanner-container { width: 100%; height: 200px; background: #000; border-radius: 12px; margin-bottom: 10px; border: 2px solid #37474f; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        .btn-load { background: #546e7a; color: white; }
+        .btn-scan { background: #1976d2; color: white; }
+        .btn-voice { background: #fbc02d; color: #000; border: 2px solid #000; }
+        .btn-save { background: #388e3c; color: white; margin-top: 15px; }
+        #status { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 6px solid #1976d2; font-size: 15px; font-weight: 600; color: #37474f; }
+        .highlight { color: #d32f2f; }
+        .success { color: #388e3c; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #cfd8dc; padding: 10px; text-align: left; }
+        th { background: #f5f5f5; color: #455a64; }
     </style>
 </head>
 <body>
 
-    <div id="status">Ready! Upload Master List or start scanning.</div>
-    
+    <div id="status">Welcome! Please load the Master List to begin.</div>
     <div id="scanner-container"></div>
 
     <div class="controls">
-        <input type="file" id="upload-csv" accept=".csv" style="display:none">
-        <button class="btn-scan" onclick="document.getElementById('upload-csv').click()">1. Load Work File</button>
-        <button class="btn-scan" onclick="startScanner()">2. Start Camera</button>
-        <button class="btn-voice" onclick="startVoiceRecognition()">🎤 Voice Input (English)</button>
-        <button class="btn-save" onclick="exportToCSV()">💾 Save Final Stock List</button>
+        <input type="file" id="csvFile" accept=".csv" style="display:none">
+        <button class="btn-load" onclick="document.getElementById('csvFile').click()">📂 1. LOAD MASTER LIST</button>
+        <button class="btn-scan" onclick="startScanner()">📷 2. START SCANNER</button>
+        <button class="btn-voice" id="voiceBtn" onclick="startVoiceRecognition()" disabled>🎤 3. VOICE INPUT (NAME/QTY)</button>
+        <button class="btn-save" onclick="exportToCSV()">💾 DOWNLOAD STOCK REPORT</button>
     </div>
 
     <table id="stock-table">
         <thead>
             <tr>
                 <th>Code</th>
-                <th>Product</th>
+                <th>Product Name</th>
                 <th>Price</th>
                 <th>Qty</th>
                 <th>Total</th>
@@ -48,53 +50,57 @@
     </table>
 
     <script>
-        let masterData = {};
-        let scannedItems = [];
-        let lastBarcode = "";
+        let masterList = [];
+        let currentBarcode = "";
+        let finalStock = [];
 
-        // 1. Load Master CSV
-        document.getElementById('upload-csv').addEventListener('change', function(e) {
-            const file = e.target.files[0];
+        // 1. Load Work File
+        document.getElementById('csvFile').addEventListener('change', function(e) {
             const reader = new FileReader();
             reader.onload = function(event) {
-                const text = event.target.result;
-                const rows = text.split('\n').slice(1);
-                rows.forEach(row => {
-                    const cols = row.split(',');
-                    if(cols.length >= 5) {
-                        masterData[cols[0].trim()] = { // PRODUCT CODE as key
-                            supplier: cols[1],
-                            name: cols[2],
-                            caseSize: cols[3],
-                            price: parseFloat(cols[4]) || 0
-                        };
-                    }
-                });
-                document.getElementById('status').innerText = "Master List Loaded! Items: " + Object.keys(masterData).length;
+                const rows = event.target.result.split('\n');
+                masterList = rows.map(row => row.split(',').map(cell => cell.trim()));
+                document.getElementById('status').innerText = "Master List loaded successfully! Ready to scan.";
             };
-            reader.readAsText(file);
+            reader.readAsText(e.target.files[0]);
         });
 
-        // 2. Scanner Logic
+        // 2. Scanner Function
         function startScanner() {
             Quagga.init({
                 inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#scanner-container') },
                 decoder: { readers: ["ean_reader", "code_128_reader"] }
             }, function(err) {
-                if (err) { console.log(err); return; }
-                Quagga.start();
-                document.getElementById('status').innerText = "Camera Active. Scan a barcode...";
+                if (!err) {
+                    Quagga.start();
+                    document.getElementById('status').innerText = "Scanner active. Please point at a barcode.";
+                }
             });
 
             Quagga.onDetected(data => {
-                lastBarcode = data.codeResult.code;
+                currentBarcode = data.codeResult.code;
                 Quagga.stop();
-                document.getElementById('status').innerText = "Scanned: " + lastBarcode + ". Say Quantity or Product Name.";
                 window.navigator.vibrate(100);
+                checkProduct(currentBarcode);
             });
         }
 
-        // 3. Voice Logic (English)
+        // 3. Logic to check if product exists
+        function checkProduct(barcode) {
+            let match = masterList.find(row => row.includes(barcode));
+            
+            if (match) {
+                document.getElementById('status').innerHTML = `<span class="success">PRODUCT FOUND: ${match[2]}</span><br>Please say the Quantity only.`;
+                document.getElementById('voiceBtn').dataset.mode = "qty_only";
+                document.getElementById('voiceBtn').dataset.match = JSON.stringify(match);
+            } else {
+                document.getElementById('status').innerHTML = `<span class="highlight">UNKNOWN BARCODE: ${barcode}</span><br>Please say the Name and Quantity.`;
+                document.getElementById('voiceBtn').dataset.mode = "all";
+            }
+            document.getElementById('voiceBtn').disabled = false;
+        }
+
+        // 4. Voice Input (English only)
         function startVoiceRecognition() {
             const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
             recognition.lang = 'en-US';
@@ -102,61 +108,54 @@
 
             recognition.onresult = function(event) {
                 const transcript = event.results[0][0].transcript.toLowerCase();
-                document.getElementById('status').innerText = "Voice heard: " + transcript;
-                processVoice(transcript);
+                const mode = document.getElementById('voiceBtn').dataset.mode;
+                
+                let qtyMatch = transcript.match(/\d+/);
+                let quantity = qtyMatch ? qtyMatch[0] : 1;
+                let entry = {};
+
+                if (mode === "qty_only") {
+                    let m = JSON.parse(document.getElementById('voiceBtn').dataset.match);
+                    entry = { code: m[0], supplier: m[1], product: m[2], price: parseFloat(m[4]) || 0, qty: quantity, barcode: currentBarcode };
+                } else {
+                    let name = transcript.replace(quantity, '').trim() || "New Product";
+                    entry = { code: "NEW", supplier: "N/A", product: name.toUpperCase(), price: 0, qty: quantity, barcode: currentBarcode };
+                }
+
+                finalStock.push(entry);
+                updateTable();
+                document.getElementById('status').innerHTML = `<span class="success">Item added!</span> Ready for next scan.`;
+                document.getElementById('voiceBtn').disabled = true;
+                currentBarcode = "";
             };
-        }
-
-        function processVoice(text) {
-            let qty = parseFloat(text.match(/\d+/));
-            let name = text.replace(/[0-9]/g, '').trim();
-
-            let item = {
-                code: "NEW",
-                supplier: "Unknown",
-                product: name || "Voice Product",
-                caseSize: "EACH",
-                price: 0,
-                quantity: qty || 0,
-                barcode: lastBarcode
-            };
-
-            // Check if barcode or name exists in masterData (Logic for pairing)
-            scannedItems.push(item);
-            updateTable();
         }
 
         function updateTable() {
             const tbody = document.querySelector('#stock-table tbody');
-            tbody.innerHTML = "";
-            scannedItems.forEach(item => {
-                let total = item.price * item.quantity;
-                tbody.innerHTML += `<tr>
-                    <td>${item.code}</td>
-                    <td>${item.product}</td>
-                    <td>${item.price.toFixed(2)}</td>
-                    <td>${item.quantity}</td>
-                    <td>${total.toFixed(2)}</td>
-                    <td>${item.barcode}</td>
-                </tr>`;
-            });
+            tbody.innerHTML = finalStock.map(i => `
+                <tr>
+                    <td>${i.code}</td>
+                    <td>${i.product}</td>
+                    <td>£${i.price.toFixed(2)}</td>
+                    <td>${i.qty}</td>
+                    <td>£${(i.price * i.qty).toFixed(2)}</td>
+                    <td>${i.barcode}</td>
+                </tr>
+            `).join('');
         }
 
+        // 5. Export Report
         function exportToCSV() {
-            let csv = "PRODUCT CODE,SUPPLIER,PRODUCT,CASE SIZE,PRICE,Quantity,TOTAL AMOUNT,TOTAL COST,SCANNED BARCODE\n";
-            scannedItems.forEach(i => {
-                let total = i.price * i.quantity;
-                csv += `${i.code},${i.supplier},${i.product},${i.caseSize},${i.price},${i.quantity},${total},${total},${i.barcode}\n`;
+            let csv = "PRODUCT CODE,SUPPLIER,PRODUCT,CASE SIZE,PRICE,Quantity,TOTAL COST,SCANNED BARCODE\n";
+            finalStock.forEach(i => {
+                csv += `"${i.code}","${i.supplier}","${i.product}","EACH",${i.price},${i.qty},${(i.price*i.qty)},'${i.barcode}\n`;
             });
             const blob = new Blob([csv], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.setAttribute('hidden', '');
-            a.setAttribute('href', url);
-            a.setAttribute('download', 'Stock_Take_Final.csv');
-            document.body.appendChild(a);
+            a.href = url;
+            a.download = 'Stock_Report_Liz2026.csv';
             a.click();
-            document.body.removeChild(a);
         }
     </script>
 </body>
