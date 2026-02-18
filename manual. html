@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liz 2026 - English Inventory Pro</title>
+    <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 10px; background: #eceff1; }
+        #scanner-container { width: 100%; height: 200px; background: #000; border-radius: 12px; margin-bottom: 10px; border: 2px solid #37474f; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        .btn-load { background: #546e7a; color: white; }
+        .btn-scan { background: #1976d2; color: white; }
+        .btn-voice { background: #fbc02d; color: #000; border: 2px solid #000; }
+        .btn-save { background: #388e3c; color: white; margin-top: 15px; }
+        #status { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 6px solid #1976d2; font-size: 15px; font-weight: 600; color: #37474f; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #cfd8dc; padding: 10px; text-align: left; }
+        th { background: #f5f5f5; color: #455a64; }
+    </style>
+</head>
+<body>
+
+    <div id="status">Welcome! Please load the Master List (.csv) to begin.</div>
+    <div id="scanner-container"></div>
+
+    <div class="controls">
+        <input type="file" id="csvFile" accept=".csv" style="display:none">
+        <button class="btn-load" onclick="document.getElementById('csvFile').click()">📂 1. LOAD MASTER LIST</button>
+        <button class="btn-scan" onclick="startScanner()">📷 2. START CAMERA SCANNER</button>
+        <button class="btn-voice" id="voiceBtn" onclick="startVoiceRecognition()" disabled>🎤 3. VOICE INPUT (NAME/QTY)</button>
+        <button class="btn-save" onclick="exportToCSV()">💾 DOWNLOAD STOCK REPORT</button>
+    </div>
+
+    <table id="stock-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Product</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Total</th>
+                <th>Barcode</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        let masterList = [];
+        let currentBarcode = "";
+        let finalStock = [];
+
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const rows = event.target.result.split('\n');
+                masterList = rows.map(row => row.split(',').map(cell => cell.trim()));
+                document.getElementById('status').innerText = "Master List loaded! Ready to scan.";
+            };
