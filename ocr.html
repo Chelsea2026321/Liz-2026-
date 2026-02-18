@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liz - Hand to Digital</title>
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f4f8; text-align: center; }
+        .container { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #output { margin-top: 20px; white-space: pre-wrap; text-align: left; background: #eee; padding: 10px; font-size: 14px; border-radius: 5px; min-height: 100px; }
+        .btn-capture { background: #673ab7; color: white; padding: 15px; border: none; border-radius: 8px; width: 100%; font-weight: bold; margin-bottom: 10px; }
+        .btn-excel { background: #2e7d32; color: white; padding: 15px; border: none; border-radius: 8px; width: 100%; font-weight: bold; display: none; }
+        #loader { display: none; color: #ff5722; font-weight: bold; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Convert Hand-written to Excel</h2>
+    <p style="font-size: 12px; color: #666;">Take a clear photo of the list. Use black pen on white paper.</p>
+    
+    <input type="file" id="imageInput" accept="image/*" capture="environment" style="display: none;">
+    <button class="btn-capture" onclick="document.getElementById('imageInput').click()">📷 TAKE PHOTO / UPLOAD</button>
+    
+    <div id="loader">Processing... Please wait (can take 20s)</div>
+    
+    <div id="output">The text will appear here...</div>
+    
+    <button id="excelBtn" class="btn-excel" onclick="downloadCSV()">💾 DOWNLOAD AS EXCEL (CSV)</button>
+</div>
+
+<script>
+    const imageInput = document.getElementById('imageInput');
+    const output = document.getElementById('output');
+    const loader = document.getElementById('loader');
+    const excelBtn = document.getElementById('excelBtn');
+
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        loader.style.display = 'block';
+        output.innerText = "Reading text...";
+
+        // Initializam Tesseract
+        Tesseract.recognize(
+            file,
+            'eng', // Limba engleza
+            { logger: m => console.log(m) }
+        ).then(({ data: { text } }) => {
+            loader.style.display = 'none';
+            output.innerText = text;
+            excelBtn.style.display = 'block';
+        }).catch(err => {
+            loader.style.display = 'none';
+            alert("Error reading image: " + err);
+        });
+    });
+
+    function downloadCSV() {
+        let rawText = output.innerText;
+        // Transformam randurile in format CSV
+        let csvContent = "data:text/csv;charset=utf-8,Recognized Content\n" + 
+                         rawText.split('\n').map(row => `"${row}"`).join('\n');
+        
+        let encodedUri = encodeURI(csvContent);
+        let link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "handwritten_list.csv");
+        document.body.appendChild(link);
+        link.click();
+    }
+</script>
+
+</body>
+</html>
