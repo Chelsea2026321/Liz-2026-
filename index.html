@@ -3,80 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Liz 2026 - Ambient Stock</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>Liz 2026 - Advanced Stock Take</title>
+    <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f2f5; margin: 0; padding: 10px; }
-        .header { background: #2c3e50; color: white; padding: 15px; border-radius: 0 0 15px 15px; margin-bottom: 20px; }
-        #reader { width: 100%; max-width: 400px; margin: auto; border-radius: 10px; overflow: hidden; border: 3px solid #34495e; }
-        .result-table { width: 100%; max-width: 400px; margin: 20px auto; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
-        .result-table th, .result-table td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
-        .btn-download { background: #27ae60; color: white; padding: 15px 30px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; width: 100%; max-width: 400px; cursor: pointer; }
+        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; }
+        #scanner-container { width: 100%; height: 250px; background: #000; margin-bottom: 10px; border-radius: 8px; overflow: hidden; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        button { padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-scan { background: #007bff; color: white; }
+        .btn-voice { background: #ffc107; color: black; }
+        .btn-save { background: #28a745; color: white; grid-column: span 2; }
+        #status { background: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-size: 0.9em; border-left: 5px solid #007bff; }
+        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.8em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #eee; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>Liz 2026</h1>
-    <p>Main Kitchen New Ambient</p>
-</div>
+    <div id="status">Ready! Upload Master List or start scanning.</div>
+    
+    <div id="scanner-container"></div>
 
-<div id="reader"></div>
+    <div class="controls">
+        <input type="file" id="upload-csv" accept=".csv" style="display:none">
+        <button class="btn-scan" onclick="document.getElementById('upload-csv').click()">1. Load Work File</button>
+        <button class="btn-scan" onclick="startScanner()">2. Start Camera</button>
+        <button class="btn-voice" onclick="startVoiceRecognition()">🎤 Voice Input (English)</button>
+        <button class="btn-save" onclick="exportToCSV()">💾 Save Final Stock List</button>
+    </div>
 
-<table class="result-table">
-    <thead>
-        <tr style="background: #ecf0f1;">
-            <th>Barcode</th>
-            <th>Qty</th>
-        </tr>
-    </thead>
-    <tbody id="inventory-body">
-        </tbody>
-</table>
+    <table id="stock-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Product</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Total</th>
+                <th>Barcode</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
-<button class="btn-download" onclick="exportToCSV()">💾 Save Stock List</button>
+    <script>
+        let masterData = {};
+        let scannedItems = [];
+        let lastBarcode = "";
 
-<script>
-    let stock = {}; // Using an object to prevent duplicate rows for the same barcode
+        // 1. Load Master CSV
+        document.getElementById('upload-csv').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const text = event.target.result;
+                const rows = text.split('\n').slice(1);
+                rows.forEach(row => {
+                    const cols = row.split(',');
+                    if(cols.length >= 5) {
+                        masterData[cols[0].trim()] = { // PRODUCT CODE as key
+                            supplier: cols[1],
+                            name: cols[2],
+                            caseSize: cols[3],
+                            price: parseFloat(cols[4]) || 0
+                        };
+                    }
+                });
+                document.getElementById('status').innerText = "Master List Loaded! Items: " + Object.keys(masterData).length;
+            };
+            reader.readAsText(file);
+        });
 
-    function onScanSuccess(decodedText) {
-        // Vibrate phone on success
-        if (navigator.vibrate) navigator.vibrate(100);
+        // 2. Scanner Logic
+        function startScanner() {
+            Quagga.init({
+                inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#scanner-container') },
+                decoder: { readers: ["ean_reader", "code_128_reader"] }
+            }, function(err) {
+                if (err) { console.log(err); return; }
+                Quagga.start();
+                document.getElementById('status').innerText = "Camera Active. Scan a barcode...";
+            });
 
-        let qty = prompt(`Barcode: ${decodedText}\nEnter Quantity:`, "1");
-        
-        if (qty !== null && !isNaN(qty)) {
-            // Add to our list (adds to existing if scanned twice)
-            stock[decodedText] = (stock[decodedText] || 0) + parseInt(qty);
+            Quagga.onDetected(data => {
+                lastBarcode = data.codeResult.code;
+                Quagga.stop();
+                document.getElementById('status').innerText = "Scanned: " + lastBarcode + ". Say Quantity or Product Name.";
+                window.navigator.vibrate(100);
+            });
+        }
+
+        // 3. Voice Logic (English)
+        function startVoiceRecognition() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.start();
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                document.getElementById('status').innerText = "Voice heard: " + transcript;
+                processVoice(transcript);
+            };
+        }
+
+        function processVoice(text) {
+            let qty = parseFloat(text.match(/\d+/));
+            let name = text.replace(/[0-9]/g, '').trim();
+
+            let item = {
+                code: "NEW",
+                supplier: "Unknown",
+                product: name || "Voice Product",
+                caseSize: "EACH",
+                price: 0,
+                quantity: qty || 0,
+                barcode: lastBarcode
+            };
+
+            // Check if barcode or name exists in masterData (Logic for pairing)
+            scannedItems.push(item);
             updateTable();
         }
-    }
 
-    function updateTable() {
-        const body = document.getElementById('inventory-body');
-        body.innerHTML = "";
-        for (const [code, count] of Object.entries(stock)) {
-            body.innerHTML += `<tr><td>${code}</td><td><b>${count}</b></td></tr>`;
+        function updateTable() {
+            const tbody = document.querySelector('#stock-table tbody');
+            tbody.innerHTML = "";
+            scannedItems.forEach(item => {
+                let total = item.price * item.quantity;
+                tbody.innerHTML += `<tr>
+                    <td>${item.code}</td>
+                    <td>${item.product}</td>
+                    <td>${item.price.toFixed(2)}</td>
+                    <td>${item.quantity}</td>
+                    <td>${total.toFixed(2)}</td>
+                    <td>${item.barcode}</td>
+                </tr>`;
+            });
         }
-    }
 
-    function exportToCSV() {
-        if (Object.keys(stock).length === 0) return alert("Scan something first!");
-        let csv = "Barcode,Quantity\n";
-        for (const [code, count] of Object.entries(stock)) {
-            csv += `${code},${count}\n`;
+        function exportToCSV() {
+            let csv = "PRODUCT CODE,SUPPLIER,PRODUCT,CASE SIZE,PRICE,Quantity,TOTAL AMOUNT,TOTAL COST,SCANNED BARCODE\n";
+            scannedItems.forEach(i => {
+                let total = i.price * i.quantity;
+                csv += `${i.code},${i.supplier},${i.product},${i.caseSize},${i.price},${i.quantity},${total},${total},${i.barcode}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', '');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'Stock_Take_Final.csv');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Stock_Scan_${new Date().toLocaleDateString()}.csv`;
-        a.click();
-    }
-
-    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-    scanner.render(onScanSuccess);
-</script>
-
+    </script>
 </body>
 </html>
