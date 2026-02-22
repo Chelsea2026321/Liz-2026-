@@ -3,28 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Inventory - Final Fix</title>
+    <title>Liz Inventory - Voice & Fix</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 10px; }
         .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; margin-bottom: 8px; width: 100%; }
         .btn-blue { background: #1a73e8; color: white; }
-        .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 15px; width: calc(100% - 30px); z-index: 100; height: 60px; font-size: 18px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); }
+        .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 15px; width: calc(100% - 30px); z-index: 100; height: 60px; font-size: 18px; }
         .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 48%; display: inline-block; font-size: 11px; min-height: 40px; margin: 1%; vertical-align: top; }
         .active { background: #1a73e8 !important; color: white !important; }
+        .search-container { display: flex; gap: 5px; margin-bottom: 10px; }
+        .btn-mic { background: #ea4335; color: white; width: 60px; border-radius: 8px; font-size: 24px; border: none; display: flex; align-items: center; justify-content: center; }
         input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 100px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         #popup { position: fixed; top: 20%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.4); z-index: 1001; display: none; border: 2px solid #1a73e8; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; }
-        #counter { color: #34a853; font-weight: bold; margin-bottom: 10px; text-align: center; }
+        #counter { color: #34a853; font-weight: bold; margin-bottom: 10px; text-align: center; font-size: 14px; }
     </style>
 </head>
 <body>
 
 <div id="setup" class="card">
-    <h3>1. Încarcă Fișierul Master</h3>
+    <h3>1. Încarcă Excel Master</h3>
     <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
     <select id="l">
         <option value="MAIN KITCHEN">Main Kitchen</option>
@@ -37,21 +39,24 @@
 </div>
 
 <div id="app" style="display:none">
-    <div id="counter">Produse salvate: 0</div>
+    <div id="counter">Produse salvate în memorie: 0</div>
     <div id="btns" class="card" style="text-align:center"></div>
-    <input type="text" id="s" placeholder="Căutare..." oninput="srch()" style="margin-bottom:10px;">
+    <div class="search-container">
+        <input type="text" id="s" placeholder="Caută sau spune..." oninput="srch()">
+        <button class="btn-mic" onclick="startVoice()">🎤</button>
+    </div>
     <div id="results"></div>
 </div>
 
-<div class="overlay" id="ov"></div>
+<div class="overlay" id="ov" onclick="cls()"></div>
 <div id="popup">
-    <h4 id="pN" style="margin-top:0"></h4>
-    <input type="number" id="pQ" placeholder="Introdu Cantitatea" inputmode="decimal">
-    <button class="btn btn-blue" onclick="sv()">SALVEAZĂ</button>
-    <button class="btn" style="background:#eee" onclick="cls()">ÎNAPOI</button>
+    <h4 id="pN" style="margin:0 0 15px 0; color: #1a73e8;"></h4>
+    <input type="number" id="pQ" placeholder="Cantitate" inputmode="decimal">
+    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">SALVEAZĂ CANTITATEA</button>
+    <button class="btn" style="background:#fce8e6; color:#d93025;" onclick="cls()">ANULEAZĂ</button>
 </div>
 
-<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ & TRIMITE</button>
+<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ EXCEL (.xlsx)</button>
 
 <script>
 let data = []; let logs = []; let sel = null;
@@ -91,6 +96,20 @@ function start() {
     document.getElementById('ex').style.display = "block";
 }
 
+function startVoice() {
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!window.SpeechRecognition) return alert("Microfonul nu este suportat de acest browser. Folosiți Chrome sau Safari.");
+    const rec = new SpeechRecognition();
+    rec.lang = 'en-US';
+    rec.onstart = () => { document.getElementById('s').placeholder = "Ascult..."; };
+    rec.onresult = (e) => { 
+        document.getElementById('s').value = e.results[0][0].transcript; 
+        document.getElementById('s').placeholder = "Căutare...";
+        srch(); 
+    };
+    rec.start();
+}
+
 function show(area, btn) {
     document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
     btn.classList.add('active');
@@ -107,7 +126,7 @@ function render(list) {
     div.innerHTML = list.slice(0, 100).map(i => `
         <div class="item" onclick="ask('${i.n.replace(/'/g,"")}','${i.a}')">
             <span><b>${i.n}</b><br><small>${i.a}</small></span>
-            <span style="color:#1a73e8; font-size:20px;">+</span>
+            <span style="color:#1a73e8; font-size:24px; font-weight:bold;">+</span>
         </div>
     `).join('');
 }
@@ -117,14 +136,20 @@ function ask(name, area) {
     document.getElementById('pN').innerText = name;
     document.getElementById('ov').style.display = "block";
     document.getElementById('popup').style.display = "block";
-    setTimeout(() => document.getElementById('pQ').focus(), 150);
+    setTimeout(() => document.getElementById('pQ').focus(), 200);
 }
 
 function sv() {
     let q = document.getElementById('pQ').value;
     if(!q) return;
-    logs.push({ Locatie: document.getElementById('l').value, Arie: sel.a, Produs: sel.n, Cantitate: q });
-    document.getElementById('counter').innerText = "Produse salvate: " + logs.length;
+    logs.push({ 
+        Data: new Date().toLocaleDateString(),
+        Locatie: document.getElementById('l').value, 
+        Arie: sel.a, 
+        Produs: sel.n, 
+        Cantitate: q 
+    });
+    document.getElementById('counter').innerText = "Produse salvate în memorie: " + logs.length;
     cls();
 }
 
@@ -134,37 +159,19 @@ function cls() {
     document.getElementById('pQ').value = "";
 }
 
-// FUNCȚIA DE DESCARCARE REPARATĂ
 function dl() {
-    if(logs.length === 0) return alert("Nu ai date!");
-    try {
-        const ws = XLSX.utils.json_to_sheet(logs);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Stoc");
-        
-        // Metoda cea mai sigură pentru mobil:
-        const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
-        function s2ab(s) {
-            const buf = new ArrayBuffer(s.length);
-            const view = new Uint8Array(buf);
-            for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
-            return buf;
-        }
-
-        const blob = new Blob([s2ab(wbout)], {type:"application/octet-stream"});
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        document.body.appendChild(a);
-        a.style = "display: none";
-        a.href = url;
-        a.download = `Stoc_${document.getElementById('l').value}_Feb.xlsx`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-        
-        alert("Fișierul se descarcă! Verifică folderul 'Downloads' sau notificările telefonului.");
-    } catch (err) {
-        alert("Eroare la descărcare: " + err);
-    }
+    if(logs.length === 0) return alert("Nu ai salvat nicio cantitate!");
+    
+    const ws = XLSX.utils.json_to_sheet(logs);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Stoc");
+    
+    // Metoda de descărcare forțată
+    const loc = document.getElementById('l').value;
+    const fileName = `STOC_${loc}_${new Date().getTime()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    
+    alert("Dacă descărcarea nu a pornit, asigurați-vă că nu sunteți în browserul WhatsApp. Apăsați pe cele 3 puncte și alegeți 'Open in Browser'.");
 }
 </script>
 </body>
