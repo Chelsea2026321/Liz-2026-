@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - FIX FINAL</title>
+    <title>Liz Stock Take - Voice & Scan Fixed</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -12,9 +12,11 @@
         .btn { border: none; border-radius: 8px; padding: 15px; font-weight: bold; cursor: pointer; width: 100%; margin-bottom: 10px; }
         .btn-blue { background: #1a73e8; color: white; }
         .btn-scan { background: #673ab7; color: white; margin-bottom: 15px; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-mic { background: #ea4335; color: white; width: 55px; border-radius: 8px; font-size: 22px; border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 10px; width: calc(100% - 20px); z-index: 100; height: 60px; font-size: 18px; }
         .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 47%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; vertical-align: top; }
         .active { background: #1a73e8 !important; color: white !important; }
+        .search-row { display: flex; gap: 8px; margin: 10px 0; align-items: stretch; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -30,7 +32,7 @@
 
 <div id="setup-screen" class="card">
     <h3>Step 1: Details</h3>
-    <input type="text" id="userName" placeholder="Your Name (e.g. Sandra)" style="margin-bottom:10px;">
+    <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
     <p style="font-size: 12px; color: #666;">Upload Master File:</p>
     <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
     <button id="startButton" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
@@ -39,9 +41,12 @@
 <div id="main-app" style="display:none">
     <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
     <div id="area-buttons" class="card" style="text-align:center"></div>
-    <div style="margin: 10px 0;">
-        <input type="text" id="searchInput" placeholder="Search product..." oninput="handleSearch()">
+    
+    <div class="search-row">
+        <input type="text" id="searchInput" placeholder="Search by name or code..." oninput="handleSearch()">
+        <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
+    
     <div id="results"></div>
 </div>
 
@@ -74,21 +79,14 @@ function processFile(input) {
         
         wb.SheetNames.forEach(name => {
             if(name.toLowerCase().includes("summary")) return;
-            
             let b = document.createElement('button'); b.className = 'btn btn-area'; b.innerText = name;
             b.onclick = () => filterByArea(name, b); btnContainer.appendChild(b);
-            
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws);
-            
             rows.forEach(r => {
-                // EXTRACȚIE MANUALĂ BAZATĂ PE POZELE TALE:
-                // Coloana C (index 2) este de obicei "Produs"
-                let keys = Object.keys(r);
-                let nameFound = r["Produs"] || r["Product"] || r[keys[2]] || ""; 
-                let codeFound = r["Cod"] || r["Code"] || r[keys[1]] || r[keys[0]] || "";
-                
-                if(nameFound && String(nameFound).length > 2) {
+                let nameFound = r["Produs"] || r["Product"] || r["Description"] || "";
+                let codeFound = r["Cod"] || r["Code"] || r["Barcode"] || "";
+                if(nameFound) {
                     masterData.push({ n: String(nameFound), c: String(codeFound), a: name });
                 }
             });
@@ -99,7 +97,7 @@ function processFile(input) {
 }
 
 function goToApp() {
-    if(!document.getElementById('userName').value) return alert("Enter your name!");
+    if(!document.getElementById('userName').value) return alert("Enter name!");
     document.getElementById('setup-screen').style.display = "none";
     document.getElementById('main-app').style.display = "block";
     document.getElementById('downloadBtn').style.display = "block";
@@ -111,10 +109,9 @@ function startScan() {
     codeReader.decodeFromVideoDevice(null, 'video', (result) => {
         if (result) {
             stopScan();
-            let code = result.text;
-            document.getElementById('searchInput').value = code;
+            document.getElementById('searchInput').value = result.text;
             handleSearch();
-            let found = masterData.find(x => x.c == code);
+            let found = masterData.find(x => x.c == result.text);
             if(found) openInput(found.n, found.a);
         }
     });
@@ -129,7 +126,7 @@ function handleSearch() {
 
 function renderList(list) {
     let div = document.getElementById('results');
-    div.innerHTML = list.slice(0, 100).map(i => `
+    div.innerHTML = list.slice(0, 80).map(i => `
         <div class="item" onclick="openInput('${i.n.replace(/'/g,"")}','${i.a}')">
             <div class="prod-info">
                 <span class="prod-name">${i.n}</span>
@@ -165,7 +162,6 @@ function closePopup() {
 
 function exportExcel() {
     const keys = Object.keys(logs);
-    if(keys.length === 0) return alert("No data recorded!");
     const name = document.getElementById('userName').value;
     const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Qty: logs[k].q }));
     const ws = XLSX.utils.json_to_sheet(finalData);
@@ -178,6 +174,17 @@ function filterByArea(areaName, btnElement) {
     document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
     btnElement.classList.add('active'); 
     renderList(masterData.filter(x => x.a === areaName));
+}
+
+function runVoice() {
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!window.SpeechRecognition) return alert("Voice not supported on this device.");
+    const rec = new SpeechRecognition(); rec.lang = 'en-US';
+    rec.onresult = (e) => { 
+        document.getElementById('searchInput').value = e.results[0][0].transcript; 
+        handleSearch(); 
+    };
+    rec.start();
 }
 </script>
 </body>
