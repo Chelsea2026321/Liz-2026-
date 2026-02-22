@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Personalizat</title>
+    <title>Liz Inventory - Final Solution</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
@@ -16,8 +16,9 @@
         .search-container { display: flex; gap: 8px; margin: 10px 0; }
         .btn-mic { background: #ea4335; color: white; width: 60px; border-radius: 8px; font-size: 24px; border: none; display: flex; align-items: center; justify-content: center; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        #results { margin-top: 15px; padding-bottom: 100px; }
+        #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
+        #backup-zone { display: none; background: #fff9c4; border: 2px dashed #fbc02d; padding: 15px; border-radius: 10px; margin-top: 10px; }
         #popup { position: fixed; top: 15%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
     </style>
@@ -25,13 +26,18 @@
 <body>
 
 <div id="setup" class="card">
-    <h3>Pasul 1: Detalii</h3>
-    <input type="text" id="userName" placeholder="Numele tău (ex: Ionut)" style="margin-bottom:10px;">
+    <h3>Inventar Liz 2026</h3>
+    <input type="text" id="userName" placeholder="Numele tău" style="margin-bottom:10px;">
     <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
     <button id="go" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="start()">DESCHIDE LISTA</button>
 </div>
 
 <div id="app" style="display:none">
+    <div id="backup-zone">
+        <p style="margin:0 0 10px 0; font-size:13px;"><b>Dacă descărcarea nu a mers:</b> Apasă butonul de mai jos și dă-mi "Paste" pe WhatsApp.</p>
+        <button class="btn btn-blue" onclick="copyToClipboard()">COPIAZĂ DATELE PENTRU WHATSAPP</button>
+    </div>
+
     <div id="btns" class="card" style="text-align:center"></div>
     <div class="search-container">
         <input type="text" id="s" placeholder="Caută produs..." oninput="srch()">
@@ -48,7 +54,7 @@
     <button class="btn" style="background:#eee" onclick="cls()">ÎNAPOI</button>
 </div>
 
-<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ EXCEL</button>
+<button id="ex" class="btn btn-green" style="display:none" onclick="finalProcess()">💾 FINALIZEAZĂ ȘI TRIMITE</button>
 
 <script>
 let data = []; let logs = []; let sel = null;
@@ -62,11 +68,8 @@ function readExcel(input) {
         btns.innerHTML = "";
         wb.SheetNames.forEach(name => {
             if(name.toLowerCase().includes("summary")) return;
-            let b = document.createElement('button');
-            b.className = 'btn btn-area';
-            b.innerText = name;
-            b.onclick = () => show(name, b);
-            btns.appendChild(b);
+            let b = document.createElement('button'); b.className = 'btn btn-area'; b.innerText = name;
+            b.onclick = () => show(name, b); btns.appendChild(b);
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws, {header: 1});
             rows.forEach(r => {
@@ -83,7 +86,7 @@ function readExcel(input) {
 }
 
 function start() {
-    if(!document.getElementById('userName').value) return alert("Te rugăm să îți scrii numele mai întâi!");
+    if(!document.getElementById('userName').value) return alert("Scrie-ți numele!");
     document.getElementById('setup').style.display = "none";
     document.getElementById('app').style.display = "block";
     document.getElementById('ex').style.display = "block";
@@ -91,17 +94,15 @@ function start() {
 
 function startVoice() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) return alert("Microfonul nu e suportat. Folosiți Chrome.");
-    const rec = new SpeechRecognition();
-    rec.lang = 'en-US';
+    if (!window.SpeechRecognition) return alert("Microfon nesuportat.");
+    const rec = new SpeechRecognition(); rec.lang = 'en-US';
     rec.onresult = (e) => { document.getElementById('s').value = e.results[0][0].transcript; srch(); };
     rec.start();
 }
 
 function show(area, btn) {
     document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
-    btn.classList.add('active');
-    render(data.filter(x => x.a === area));
+    btn.classList.add('active'); render(data.filter(x => x.a === area));
 }
 
 function srch() {
@@ -120,59 +121,44 @@ function render(list) {
 }
 
 function ask(name, area) {
-    sel = { n: name, a: area };
-    document.getElementById('pN').innerText = name;
-    document.getElementById('ov').style.display = "block";
-    document.getElementById('popup').style.display = "block";
+    sel = { n: name, a: area }; document.getElementById('pN').innerText = name;
+    document.getElementById('ov').style.display = "block"; document.getElementById('popup').style.display = "block";
     setTimeout(() => document.getElementById('pQ').focus(), 150);
 }
 
 function sv() {
-    let q = document.getElementById('pQ').value;
-    if(!q) return;
-    logs.push({ 
-        Coleg: document.getElementById('userName').value,
-        Arie: sel.a, 
-        Produs: sel.n, 
-        Cantitate: q 
-    });
+    let q = document.getElementById('pQ').value; if(!q) return;
+    logs.push({ Coleg: document.getElementById('userName').value, Arie: sel.a, Produs: sel.n, Cantitate: q });
     cls();
 }
 
-function cls() {
-    document.getElementById('ov').style.display = "none";
-    document.getElementById('popup').style.display = "none";
-    document.getElementById('pQ').value = "";
+function cls() { document.getElementById('ov').style.display = "none"; document.getElementById('popup').style.display = "none"; document.getElementById('pQ').value = ""; }
+
+function finalProcess() {
+    if(logs.length === 0) return alert("Nu ai date!");
+    const name = document.getElementById('userName').value;
+    
+    // 1. Încercare Excel
+    try {
+        const ws = XLSX.utils.json_to_sheet(logs);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Stoc");
+        XLSX.writeFile(wb, `Inventar_${name}.xlsx`);
+    } catch(e) {}
+
+    // 2. Afișare zonă backup
+    document.getElementById('backup-zone').style.display = "block";
+    window.scrollTo(0,0);
+    alert("Am încercat descărcarea. Dacă nu a apărut nimic în folderul Downloads, folosește butonul ALBASTRU de sus pentru WhatsApp.");
 }
 
-function dl() {
-    if(logs.length === 0) return alert("Nu ai date!");
-    const name = document.getElementById('userName').value.replace(/\s+/g, '_');
-    const ws = XLSX.utils.json_to_sheet(logs);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Stoc");
+function copyToClipboard() {
+    let text = "INVENTAR " + document.getElementById('userName').value + ":\n";
+    logs.forEach(l => { text += l.Arie + " | " + l.Produs + " | " + l.Cantitate + "\n"; });
     
-    // Nume fișier unic
-    const fileName = `Inventar_${name}_${new Date().getHours()}_${new Date().getMinutes()}.xlsx`;
-    
-    // Metodă de descărcare forțată
-    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
-    function s2ab(s) {
-        const buf = new ArrayBuffer(s.length);
-        const view = new Uint8Array(buf);
-        for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
-        return buf;
-    }
-    const blob = new Blob([s2ab(wbout)], {type:"application/octet-stream"});
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    alert("Am încercat descărcarea fișierului: " + fileName);
+    navigator.clipboard.writeText(text).then(() => {
+        alert("DATE COPIATE! Acum du-te pe WhatsApp, ține apăsat unde scrii mesajul și alege PASTE (Lipește).");
+    });
 }
 </script>
 </body>
