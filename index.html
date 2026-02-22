@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Voce + Manual</title>
+    <title>Liz Stock Take - Denumiri Corecte</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 10px; }
-        .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
-        .btn-blue { background: #1a73e8; color: white; width: 100%; }
+        .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; margin-bottom: 8px; width: 100%; }
+        .btn-blue { background: #1a73e8; color: white; }
         .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 15px; width: calc(100% - 30px); z-index: 100; height: 50px; }
         .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 48%; display: inline-block; font-size: 11px; min-height: 40px; margin: 1%; vertical-align: top; }
         .active { background: #1a73e8 !important; color: white !important; }
         .search-container { display: flex; gap: 5px; margin-top: 10px; }
+        .btn-mic { background: #ea4335; color: white; width: 60px; border-radius: 8px; font-size: 20px; border: none; }
         input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        .btn-mic { background: #ea4335; color: white; width: 50px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         #results { margin-top: 15px; padding-bottom: 80px; }
-        .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
-        #popup { position: fixed; top: 20%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.4); z-index: 1001; display: none; border: 2px solid #1a73e8; }
+        .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        #popup { position: fixed; top: 20%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.4); z-index: 1001; display: none; border: 2px solid #1a73e8; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; }
     </style>
 </head>
 <body>
 
 <div id="setup" class="card">
-    <h3>Pasul 1: Încarcă Excel</h3>
-    <input type="file" id="f" accept=".xlsx" onchange="read(this)">
+    <h3>1. Încarcă Fișierul Februarie</h3>
+    <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
     <select id="l">
         <option value="MAIN KITCHEN">Main Kitchen</option>
         <option value="MILLS">Mills</option>
@@ -40,18 +40,18 @@
 <div id="app" style="display:none">
     <div id="btns" class="card" style="text-align:center"></div>
     <div class="search-container">
-        <input type="text" id="s" placeholder="Scrie sau folosește mic..." oninput="srch()">
-        <button class="btn btn-mic" onclick="startVoice()">🎤</button>
+        <input type="text" id="s" placeholder="Caută produs..." oninput="srch()">
+        <button class="btn-mic" onclick="startVoice()">🎤</button>
     </div>
     <div id="results"></div>
 </div>
 
 <div class="overlay" id="ov"></div>
 <div id="popup">
-    <h4 id="pN"></h4>
-    <input type="number" id="pQ" placeholder="Cantitate" inputmode="decimal">
+    <h4 id="pN" style="margin-top:0"></h4>
+    <input type="number" id="pQ" placeholder="Introdu Cantitatea" inputmode="decimal">
     <button class="btn btn-blue" onclick="sv()">SALVEAZĂ</button>
-    <button class="btn" style="background:#eee; width: 100%;" onclick="cls()">ÎNAPOI</button>
+    <button class="btn" style="background:#eee" onclick="cls()">ÎNAPOI</button>
 </div>
 
 <button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ EXCEL FINAL</button>
@@ -59,25 +59,33 @@
 <script>
 let data = []; let logs = []; let sel = null;
 
-function read(input) {
+function readExcel(input) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
         data = [];
         const btns = document.getElementById('btns');
         btns.innerHTML = "";
+
         wb.SheetNames.forEach(name => {
             if(name.toLowerCase().includes("summary")) return;
+            
             let b = document.createElement('button');
             b.className = 'btn btn-area';
             b.innerText = name;
             b.onclick = () => show(name, b);
             btns.appendChild(b);
+
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws, {header: 1});
+            
             rows.forEach(r => {
-                let nameFound = r.find(cell => cell && String(cell).length > 3);
-                if(nameFound && isNaN(nameFound)) {
+                // Strategie nouă: Căutăm coloana cu textul cel mai lung (care e de obicei denumirea)
+                // Excludem rândurile care sunt titluri de coloană (PRODUCT, CODE etc)
+                let candidates = r.filter(cell => cell && String(cell).length > 3);
+                let nameFound = candidates.reduce((a, b) => String(a).length > String(b).length ? a : b, "");
+                
+                if(nameFound && isNaN(nameFound) && !["PRODUCT","DESCRIPTION","PRODUCT CODE"].includes(String(nameFound).toUpperCase())) {
                     data.push({ n: nameFound, a: name });
                 }
             });
@@ -95,19 +103,11 @@ function start() {
 
 function startVoice() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) return alert("Browserul nu suportă căutarea vocală.");
-    
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US'; // Setat pe engleză pentru termeni culinari
-    document.getElementById('s').placeholder = "Ascult...";
-    
-    recognition.onresult = (event) => {
-        const text = event.results[0][0].transcript;
-        document.getElementById('s').value = text;
-        document.getElementById('s').placeholder = "Căutare rapidă...";
-        srch();
-    };
-    recognition.start();
+    if (!window.SpeechRecognition) return alert("Browserul nu suportă voce.");
+    const rec = new SpeechRecognition();
+    rec.lang = 'en-US';
+    rec.onresult = (e) => { document.getElementById('s').value = e.results[0][0].transcript; srch(); };
+    rec.start();
 }
 
 function show(area, btn) {
@@ -123,10 +123,10 @@ function srch() {
 
 function render(list) {
     let div = document.getElementById('results');
-    div.innerHTML = list.slice(0, 50).map(i => `
+    div.innerHTML = list.slice(0, 100).map(i => `
         <div class="item" onclick="ask('${i.n.replace(/'/g,"")}','${i.a}')">
             <span><b>${i.n}</b><br><small>${i.a}</small></span>
-            <span style="color:#1a73e8"><b>+</b></span>
+            <span style="color:#1a73e8; font-size:20px;">+</span>
         </div>
     `).join('');
 }
@@ -136,7 +136,7 @@ function ask(name, area) {
     document.getElementById('pN').innerText = name;
     document.getElementById('ov').style.display = "block";
     document.getElementById('popup').style.display = "block";
-    document.getElementById('pQ').focus();
+    setTimeout(() => document.getElementById('pQ').focus(), 100);
 }
 
 function sv() {
@@ -153,10 +153,11 @@ function cls() {
 }
 
 function dl() {
+    if(logs.length === 0) return alert("Nu ai date salvate!");
     const ws = XLSX.utils.json_to_sheet(logs);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Stoc");
-    XLSX.writeFile(wb, "Inventar_Liz.xlsx");
+    XLSX.writeFile(wb, `Stoc_${document.getElementById('l').value}.xlsx`);
 }
 </script>
 </body>
