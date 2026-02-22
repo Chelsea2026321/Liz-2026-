@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - English Version</title>
+    <title>Liz Stock Take - English Final</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
@@ -20,48 +20,138 @@
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
         #popup { position: fixed; top: 15%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
-        #status { text-align: center; color: #34a853; font-weight: bold; margin-bottom: 5px; }
+        #status-bar { text-align: center; color: #34a853; font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
-<div id="setup" class="card">
+<div id="setup-screen" class="card">
     <h3>Step 1: Details</h3>
-    <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
+    <input type="text" id="userName" placeholder="Your Name (e.g. Confucius)" style="margin-bottom:10px;">
     <p style="font-size: 12px; color: #666; margin-bottom: 5px;">Upload Master File:</p>
-    <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
-    <button id="go" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="start()">OPEN PRODUCT LIST</button>
+    <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
+    <button id="startButton" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
 </div>
 
-<div id="app" style="display:none">
-    <div id="status">Items counted: 0</div>
-    <div id="btns" class="card" style="text-align:center"></div>
+<div id="main-app" style="display:none">
+    <div id="status-bar">Items counted: 0</div>
+    <div id="area-buttons" class="card" style="text-align:center"></div>
     <div class="search-container">
-        <input type="text" id="s" placeholder="Search product..." oninput="srch()">
-        <button class="btn-mic" onclick="startVoice()">🎤</button>
+        <input type="text" id="searchInput" placeholder="Search product..." oninput="handleSearch()">
+        <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
     <div id="results"></div>
 </div>
 
-<div class="overlay" id="ov" onclick="cls()"></div>
+<div class="overlay" id="overlay" onclick="closePopup()"></div>
 <div id="popup">
-    <h4 id="pN" style="margin-top:0; color:#1a73e8;"></h4>
-    <input type="number" id="pQ" placeholder="Enter Quantity" inputmode="decimal">
-    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">SAVE QUANTITY</button>
-    <button class="btn" style="background:#eee" onclick="cls()">BACK</button>
+    <h4 id="prodName" style="margin-top:0; color:#1a73e8;"></h4>
+    <input type="number" id="prodQty" placeholder="Enter Quantity" inputmode="decimal">
+    <button class="btn btn-blue" style="margin-top:10px;" onclick="saveEntry()">SAVE QUANTITY</button>
+    <button class="btn" style="background:#eee" onclick="closePopup()">BACK</button>
 </div>
 
-<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DOWNLOAD FINAL EXCEL</button>
+<button id="downloadBtn" class="btn btn-green" style="display:none" onclick="exportExcel()">💾 DOWNLOAD FINAL EXCEL</button>
 
 <script>
-let data = []; let logs = {}; let sel = null;
+let masterData = []; let logs = {}; let activeItem = null;
 
-function readExcel(input) {
+function processFile(input) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-        data = [];
-        const btns = document.getElementById('btns');
-        btns.innerHTML = "";
+        masterData = [];
+        const btnContainer = document.getElementById('area-buttons');
+        btnContainer.innerHTML = "";
         wb.SheetNames.forEach(name => {
-            if(
+            if(name.toLowerCase().includes("summary")) return;
+            let b = document.createElement('button'); b.className = 'btn btn-area'; b.innerText = name;
+            b.onclick = () => filterByArea(name, b); btnContainer.appendChild(b);
+            let ws = wb.Sheets[name];
+            let rows = XLSX.utils.sheet_to_json(ws, {header: 1});
+            rows.forEach(r => {
+                let textOnly = r.filter(cell => cell && String(cell).length > 3);
+                let longestText = textOnly.reduce((a, b) => String(a).length > String(b).length ? a : b, "");
+                if(longestText && isNaN(longestText) && !["PRODUCT","DESCRIPTION"].includes(String(longestText).toUpperCase())) {
+                    masterData.push({ n: longestText, a: name });
+                }
+            });
+        });
+        document.getElementById('startButton').style.display = "block";
+    };
+    reader.readAsArrayBuffer(input.files[0]);
+}
+
+function goToApp() {
+    if(!document.getElementById('userName').value) return alert("Please enter your name!");
+    document.getElementById('setup-screen').style.display = "none";
+    document.getElementById('main-app').style.display = "block";
+    document.getElementById('downloadBtn').style.display = "block";
+}
+
+function runVoice() {
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!window.SpeechRecognition) return alert("Voice search not supported.");
+    const rec = new SpeechRecognition(); rec.lang = 'en-US';
+    rec.onresult = (e) => { document.getElementById('searchInput').value = e.results[0][0].transcript; handleSearch(); };
+    rec.start();
+}
+
+function filterByArea(areaName, btnElement) {
+    document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
+    btnElement.classList.add('active'); 
+    renderList(masterData.filter(x => x.a === areaName));
+}
+
+function handleSearch() {
+    let term = document.getElementById('searchInput').value.toLowerCase();
+    renderList(masterData.filter(x => x.n.toLowerCase().includes(term)));
+}
+
+function renderList(list) {
+    let div = document.getElementById('results');
+    div.innerHTML = list.slice(0, 50).map(i => `
+        <div class="item" onclick="openInput('${i.n.replace(/'/g,"")}','${i.a}')">
+            <span><b>${i.n}</b><br><small>${i.a}</small></span>
+            <span style="color:#1a73e8; font-weight:bold;">${logs[i.n] ? logs[i.n].q : '+'}</span>
+        </div>
+    `).join('');
+}
+
+function openInput(name, area) {
+    activeItem = { n: name, a: area };
+    document.getElementById('prodName').innerText = name + (logs[name] ? " (Current: " + logs[name].q + ")" : "");
+    document.getElementById('overlay').style.display = "block";
+    document.getElementById('popup').style.display = "block";
+    setTimeout(() => document.getElementById('prodQty').focus(), 150);
+}
+
+function saveEntry() {
+    let q = parseFloat(document.getElementById('prodQty').value);
+    if(isNaN(q)) return;
+    if(logs[activeItem.n]) { logs[activeItem.n].q += q; } else { logs[activeItem.n] = { a: activeItem.a, q: q }; }
+    document.getElementById('status-bar').innerText = "Items counted: " + Object.keys(logs).length;
+    handleSearch();
+    closePopup();
+}
+
+function closePopup() {
+    document.getElementById('overlay').style.display = "none";
+    document.getElementById('popup').style.display = "none";
+    document.getElementById('prodQty').value = "";
+}
+
+function exportExcel() {
+    const keys = Object.keys(logs);
+    if(keys.length === 0) return alert("No data to download!");
+    const name = document.getElementById('userName').value;
+    const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Total_Qty: logs[k].q }));
+    const ws = XLSX.utils.json_to_sheet(finalData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Stock");
+    XLSX.writeFile(wb, `Inventory_${name}.xlsx`);
+    alert("Excel file downloaded successfully!");
+}
+</script>
+</body>
+</html>
