@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Inventory - Voice & Fix</title>
+    <title>Liz Inventory - Voice & Multi-Download</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
+        body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; color: #333; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 10px; }
         .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; margin-bottom: 8px; width: 100%; }
         .btn-blue { background: #1a73e8; color: white; }
@@ -17,10 +17,10 @@
         .btn-mic { background: #ea4335; color: white; width: 60px; border-radius: 8px; font-size: 24px; border: none; display: flex; align-items: center; justify-content: center; }
         input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 100px; }
-        .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
         #popup { position: fixed; top: 20%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.4); z-index: 1001; display: none; border: 2px solid #1a73e8; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; }
-        #counter { color: #34a853; font-weight: bold; margin-bottom: 10px; text-align: center; font-size: 14px; }
+        #dl-link { display: none; background: #fb0; color: black; padding: 15px; text-align: center; font-weight: bold; border-radius: 10px; text-decoration: none; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -29,34 +29,35 @@
     <h3>1. Încarcă Excel Master</h3>
     <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
     <select id="l">
-        <option value="MAIN KITCHEN">Main Kitchen</option>
+        <option value="MAIN_KITCHEN">Main Kitchen</option>
         <option value="MILLS">Mills</option>
         <option value="SOUTH">South</option>
-        <option value="ROSE & BALL">Rose & Ball</option>
+        <option value="ROSE_BALL">Rose & Ball</option>
         <option value="CANTEEN">Canteen</option>
     </select>
     <button id="go" class="btn btn-blue" style="display:none" onclick="start()">DESCHIDE LISTA</button>
 </div>
 
 <div id="app" style="display:none">
-    <div id="counter">Produse salvate în memorie: 0</div>
+    <div id="counter" style="text-align:center; font-weight:bold; color: #34a853;">Produse salvate: 0</div>
     <div id="btns" class="card" style="text-align:center"></div>
     <div class="search-container">
-        <input type="text" id="s" placeholder="Caută sau spune..." oninput="srch()">
+        <input type="text" id="s" placeholder="Caută..." oninput="srch()">
         <button class="btn-mic" onclick="startVoice()">🎤</button>
     </div>
+    <a id="dl-link">APASĂ AICI SĂ DESCARCI FIȘIERUL</a>
     <div id="results"></div>
 </div>
 
 <div class="overlay" id="ov" onclick="cls()"></div>
 <div id="popup">
-    <h4 id="pN" style="margin:0 0 15px 0; color: #1a73e8;"></h4>
+    <h4 id="pN" style="margin:0 0 10px 0;"></h4>
     <input type="number" id="pQ" placeholder="Cantitate" inputmode="decimal">
-    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">SALVEAZĂ CANTITATEA</button>
-    <button class="btn" style="background:#fce8e6; color:#d93025;" onclick="cls()">ANULEAZĂ</button>
+    <button class="btn btn-blue" onclick="sv()">SALVEAZĂ</button>
+    <button class="btn" style="background:#eee" onclick="cls()">ÎNAPOI</button>
 </div>
 
-<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ EXCEL (.xlsx)</button>
+<button id="ex" class="btn btn-green" onclick="generateFile()">💾 GENERARE FIȘIER FINAL</button>
 
 <script>
 let data = []; let logs = []; let sel = null;
@@ -93,20 +94,14 @@ function readExcel(input) {
 function start() {
     document.getElementById('setup').style.display = "none";
     document.getElementById('app').style.display = "block";
-    document.getElementById('ex').style.display = "block";
 }
 
 function startVoice() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) return alert("Microfonul nu este suportat de acest browser. Folosiți Chrome sau Safari.");
+    if (!window.SpeechRecognition) return alert("Microfonul nu este suportat aici.");
     const rec = new SpeechRecognition();
     rec.lang = 'en-US';
-    rec.onstart = () => { document.getElementById('s').placeholder = "Ascult..."; };
-    rec.onresult = (e) => { 
-        document.getElementById('s').value = e.results[0][0].transcript; 
-        document.getElementById('s').placeholder = "Căutare...";
-        srch(); 
-    };
+    rec.onresult = (e) => { document.getElementById('s').value = e.results[0][0].transcript; srch(); };
     rec.start();
 }
 
@@ -123,10 +118,10 @@ function srch() {
 
 function render(list) {
     let div = document.getElementById('results');
-    div.innerHTML = list.slice(0, 100).map(i => `
+    div.innerHTML = list.slice(0, 50).map(i => `
         <div class="item" onclick="ask('${i.n.replace(/'/g,"")}','${i.a}')">
             <span><b>${i.n}</b><br><small>${i.a}</small></span>
-            <span style="color:#1a73e8; font-size:24px; font-weight:bold;">+</span>
+            <span style="color:#1a73e8; font-size:20px;">+</span>
         </div>
     `).join('');
 }
@@ -136,20 +131,14 @@ function ask(name, area) {
     document.getElementById('pN').innerText = name;
     document.getElementById('ov').style.display = "block";
     document.getElementById('popup').style.display = "block";
-    setTimeout(() => document.getElementById('pQ').focus(), 200);
+    setTimeout(() => document.getElementById('pQ').focus(), 150);
 }
 
 function sv() {
     let q = document.getElementById('pQ').value;
     if(!q) return;
-    logs.push({ 
-        Data: new Date().toLocaleDateString(),
-        Locatie: document.getElementById('l').value, 
-        Arie: sel.a, 
-        Produs: sel.n, 
-        Cantitate: q 
-    });
-    document.getElementById('counter').innerText = "Produse salvate în memorie: " + logs.length;
+    logs.push({ Locatie: document.getElementById('l').value, Arie: sel.a, Produs: sel.n, Cantitate: q });
+    document.getElementById('counter').innerText = "Produse salvate: " + logs.length;
     cls();
 }
 
@@ -159,19 +148,31 @@ function cls() {
     document.getElementById('pQ').value = "";
 }
 
-function dl() {
-    if(logs.length === 0) return alert("Nu ai salvat nicio cantitate!");
+function generateFile() {
+    if(logs.length === 0) return alert("Nu ai date!");
     
     const ws = XLSX.utils.json_to_sheet(logs);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Stoc");
     
-    // Metoda de descărcare forțată
-    const loc = document.getElementById('l').value;
-    const fileName = `STOC_${loc}_${new Date().getTime()}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    // Generăm un link de descărcare vizibil pentru a evita blocajele
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
+    function s2ab(s) {
+        const buf = new ArrayBuffer(s.length);
+        const view = new Uint8Array(buf);
+        for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    }
+
+    const blob = new Blob([s2ab(wbout)], {type:"application/octet-stream"});
+    const url = window.URL.createObjectURL(blob);
+    const link = document.getElementById('dl-link');
     
-    alert("Dacă descărcarea nu a pornit, asigurați-vă că nu sunteți în browserul WhatsApp. Apăsați pe cele 3 puncte și alegeți 'Open in Browser'.");
+    link.href = url;
+    link.download = `STOC_${document.getElementById('l').value}.xlsx`;
+    link.style.display = "block";
+    
+    alert("Fișier generat! Apasă pe butonul GALBEN care a apărut deasupra listei pentru a-l salva.");
 }
 </script>
 </body>
