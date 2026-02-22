@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Inventory - Final Solution</title>
+    <title>Liz Stock Take - Total Automant</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f7f6; }
@@ -18,26 +18,22 @@
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
-        #backup-zone { display: none; background: #fff9c4; border: 2px dashed #fbc02d; padding: 15px; border-radius: 10px; margin-top: 10px; }
         #popup { position: fixed; top: 15%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
+        #status { text-align: center; color: #34a853; font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
 <div id="setup" class="card">
-    <h3>Inventar Liz 2026</h3>
+    <h3>Pasul 1: Detalii</h3>
     <input type="text" id="userName" placeholder="Numele tău" style="margin-bottom:10px;">
     <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
     <button id="go" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="start()">DESCHIDE LISTA</button>
 </div>
 
 <div id="app" style="display:none">
-    <div id="backup-zone">
-        <p style="margin:0 0 10px 0; font-size:13px;"><b>Dacă descărcarea nu a mers:</b> Apasă butonul de mai jos și dă-mi "Paste" pe WhatsApp.</p>
-        <button class="btn btn-blue" onclick="copyToClipboard()">COPIAZĂ DATELE PENTRU WHATSAPP</button>
-    </div>
-
+    <div id="status">Produse în listă: 0</div>
     <div id="btns" class="card" style="text-align:center"></div>
     <div class="search-container">
         <input type="text" id="s" placeholder="Caută produs..." oninput="srch()">
@@ -49,15 +45,15 @@
 <div class="overlay" id="ov" onclick="cls()"></div>
 <div id="popup">
     <h4 id="pN" style="margin-top:0; color:#1a73e8;"></h4>
-    <input type="number" id="pQ" placeholder="Cantitate" inputmode="decimal">
-    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">SALVEAZĂ</button>
+    <input type="number" id="pQ" placeholder="Introdu Cantitatea" inputmode="decimal">
+    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">ADĂUGARE LA TOTAL</button>
     <button class="btn" style="background:#eee" onclick="cls()">ÎNAPOI</button>
 </div>
 
-<button id="ex" class="btn btn-green" style="display:none" onclick="finalProcess()">💾 FINALIZEAZĂ ȘI TRIMITE</button>
+<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DESCARCĂ EXCEL (TOTALURI)</button>
 
 <script>
-let data = []; let logs = []; let sel = null;
+let data = []; let logs = {}; let sel = null;
 
 function readExcel(input) {
     const reader = new FileReader();
@@ -115,50 +111,58 @@ function render(list) {
     div.innerHTML = list.slice(0, 50).map(i => `
         <div class="item" onclick="ask('${i.n.replace(/'/g,"")}','${i.a}')">
             <span><b>${i.n}</b><br><small>${i.a}</small></span>
-            <span style="color:#1a73e8; font-size:20px;">+</span>
+            <span style="color:#1a73e8; font-weight:bold;">${logs[i.n] ? logs[i.n].q : '+'}</span>
         </div>
     `).join('');
 }
 
 function ask(name, area) {
-    sel = { n: name, a: area }; document.getElementById('pN').innerText = name;
-    document.getElementById('ov').style.display = "block"; document.getElementById('popup').style.display = "block";
+    sel = { n: name, a: area };
+    document.getElementById('pN').innerText = name + (logs[name] ? " (Total actual: " + logs[name].q + ")" : "");
+    document.getElementById('ov').style.display = "block";
+    document.getElementById('popup').style.display = "block";
     setTimeout(() => document.getElementById('pQ').focus(), 150);
 }
 
 function sv() {
-    let q = document.getElementById('pQ').value; if(!q) return;
-    logs.push({ Coleg: document.getElementById('userName').value, Arie: sel.a, Produs: sel.n, Cantitate: q });
+    let q = parseFloat(document.getElementById('pQ').value);
+    if(isNaN(q)) return;
+    
+    if(logs[sel.n]) {
+        logs[sel.n].q += q; // Dacă există, adunăm
+    } else {
+        logs[sel.n] = { a: sel.a, q: q }; // Dacă e nou, îl creăm
+    }
+    
+    document.getElementById('status').innerText = "Produse unice în listă: " + Object.keys(logs).length;
+    srch(); // Refresh listă
     cls();
 }
 
-function cls() { document.getElementById('ov').style.display = "none"; document.getElementById('popup').style.display = "none"; document.getElementById('pQ').value = ""; }
-
-function finalProcess() {
-    if(logs.length === 0) return alert("Nu ai date!");
-    const name = document.getElementById('userName').value;
-    
-    // 1. Încercare Excel
-    try {
-        const ws = XLSX.utils.json_to_sheet(logs);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Stoc");
-        XLSX.writeFile(wb, `Inventar_${name}.xlsx`);
-    } catch(e) {}
-
-    // 2. Afișare zonă backup
-    document.getElementById('backup-zone').style.display = "block";
-    window.scrollTo(0,0);
-    alert("Am încercat descărcarea. Dacă nu a apărut nimic în folderul Downloads, folosește butonul ALBASTRU de sus pentru WhatsApp.");
+function cls() {
+    document.getElementById('ov').style.display = "none";
+    document.getElementById('popup').style.display = "none";
+    document.getElementById('pQ').value = "";
 }
 
-function copyToClipboard() {
-    let text = "INVENTAR " + document.getElementById('userName').value + ":\n";
-    logs.forEach(l => { text += l.Arie + " | " + l.Produs + " | " + l.Cantitate + "\n"; });
+function dl() {
+    const keys = Object.keys(logs);
+    if(keys.length === 0) return alert("Nu ai date!");
     
-    navigator.clipboard.writeText(text).then(() => {
-        alert("DATE COPIATE! Acum du-te pe WhatsApp, ține apăsat unde scrii mesajul și alege PASTE (Lipește).");
-    });
+    const name = document.getElementById('userName').value;
+    const finalData = keys.map(k => ({
+        Coleg: name,
+        Arie: logs[k].a,
+        Produs: k,
+        Cantitate_Totala: logs[k].q
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(finalData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Stoc_Consolidat");
+    
+    XLSX.writeFile(wb, `Inventar_${name}_Final.xlsx`);
+    alert("Fișierul cu totaluri a fost generat!");
 }
 </script>
 </body>
