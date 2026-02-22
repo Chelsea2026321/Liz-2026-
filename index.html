@@ -20,4 +20,48 @@
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
         #popup { position: fixed; top: 15%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
-        #status { text-
+        #status { text-align: center; color: #34a853; font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="setup" class="card">
+    <h3>Step 1: Details</h3>
+    <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
+    <p style="font-size: 12px; color: #666; margin-bottom: 5px;">Upload Master File:</p>
+    <input type="file" id="f" accept=".xlsx" onchange="readExcel(this)">
+    <button id="go" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="start()">OPEN PRODUCT LIST</button>
+</div>
+
+<div id="app" style="display:none">
+    <div id="status">Items counted: 0</div>
+    <div id="btns" class="card" style="text-align:center"></div>
+    <div class="search-container">
+        <input type="text" id="s" placeholder="Search product..." oninput="srch()">
+        <button class="btn-mic" onclick="startVoice()">🎤</button>
+    </div>
+    <div id="results"></div>
+</div>
+
+<div class="overlay" id="ov" onclick="cls()"></div>
+<div id="popup">
+    <h4 id="pN" style="margin-top:0; color:#1a73e8;"></h4>
+    <input type="number" id="pQ" placeholder="Enter Quantity" inputmode="decimal">
+    <button class="btn btn-blue" style="margin-top:10px;" onclick="sv()">SAVE QUANTITY</button>
+    <button class="btn" style="background:#eee" onclick="cls()">BACK</button>
+</div>
+
+<button id="ex" class="btn btn-green" style="display:none" onclick="dl()">💾 DOWNLOAD FINAL EXCEL</button>
+
+<script>
+let data = []; let logs = {}; let sel = null;
+
+function readExcel(input) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+        data = [];
+        const btns = document.getElementById('btns');
+        btns.innerHTML = "";
+        wb.SheetNames.forEach(name => {
+            if(
