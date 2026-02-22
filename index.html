@@ -3,183 +3,177 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Ultra Fast</title>
+    <title>Liz Stock Take - FIX FINAL</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; background: #f0f2f5; }
+        body { font-family: sans-serif; margin: 0; padding: 15px; background: #f0f2f5; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 10px; font-size: 14px; }
+        .btn { border: none; border-radius: 8px; padding: 12px; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 10px; }
         .btn-blue { background: #1a73e8; color: white; }
         .btn-green { background: #34a853; color: white; }
-        .btn-area { background: #ffffff; border: 2px solid #1a73e8; color: #1a73e8; margin-bottom: 5px; width: 48%; display: inline-block; }
+        .btn-area { background: #ffffff; border: 1px solid #1a73e8; color: #1a73e8; margin-bottom: 5px; width: 48%; display: inline-block; box-sizing: border-box; font-size: 12px; min-height: 45px; vertical-align: top; }
         .area-active { background: #1a73e8 !important; color: white !important; }
         input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        #results { max-height: 250px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; }
-        .res-item { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
-        .qty-badge { background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 5px; font-weight: bold; }
+        #results { max-height: 400px; overflow-y: auto; border-top: 3px solid #1a73e8; margin-top: 10px; padding-top: 10px; }
+        .res-item { padding: 15px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        #entry-popup { position: fixed; top: 15%; left: 5%; width: 90%; z-index: 9999; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 30px rgba(0,0,0,0.3); border: 2px solid #1a73e8; }
+        .overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9998; display:none; }
     </style>
 </head>
 <body>
 
     <div id="setup" class="card">
-        <h3>1. Încarcă Fișierul Master</h3>
-        <input type="file" id="fileInput" accept=".xlsx" onchange="initApp(this)">
-        <input type="text" id="worker" placeholder="Numele tău">
+        <h3>1. Încarcă Fișierul</h3>
+        <input type="file" id="fileInput" accept=".xlsx" onchange="processExcel(this)">
         <select id="loc">
-            <option value="">-- Unde numeri acum? --</option>
             <option value="MAIN KITCHEN">Main Kitchen</option>
             <option value="MILLS">Mills</option>
             <option value="SOUTH">South</option>
             <option value="ROSE & BALL">Rose & Ball</option>
             <option value="CANTEEN">Canteen</option>
         </select>
-        <button id="startBtn" class="btn btn-blue" style="display:none;" onclick="startWork()">ÎNCEPE STOCUL</button>
+        <button id="startBtn" class="btn btn-blue" style="display:none;" onclick="showApp()">ÎNCEPE MUNCĂ</button>
     </div>
 
     <div id="app" style="display:none;">
         <div class="card">
-            <h3>2. Alege Aria (Rapid)</h3>
             <div id="areaButtons"></div>
-            <input type="text" id="search" placeholder="Sau caută produs..." oninput="search()">
+            <input type="text" id="search" placeholder="Caută produs (ex: Mustard)..." oninput="manualSearch()">
             <div id="results"></div>
         </div>
+        <button class="btn btn-green" style="position:fixed; bottom:10px; left:15px; width:calc(100% - 30px); height: 50px;" onclick="exportExcel()">💾 SALVEAZĂ EXCEL & TRIMITE</button>
+    </div>
 
-        <div id="entry" class="card" style="display:none; border: 2px solid #1a73e8;">
-            <p id="targetProd" style="font-weight:bold; margin:0;"></p>
-            <small id="targetInfo" style="color:#666;"></small>
-            <input type="number" id="qty" placeholder="Introdu Cantitatea" inputmode="decimal">
-            <button class="btn btn-blue" onclick="save()">SALVEAZĂ</button>
-            <button class="btn" style="background:#eee" onclick="closeEntry()">Anulează</button>
-        </div>
-
-        <button class="btn btn-green" style="position:fixed; bottom:10px; left:15px; width:calc(100% - 30px); z-index:100;" onclick="finish()">💾 SALVEAZĂ EXCEL & TRIMITE</button>
+    <div class="overlay" id="overlay"></div>
+    <div id="entry-popup" style="display:none;">
+        <h4 id="pName" style="margin:0 0 10px 0;"></h4>
+        <input type="number" id="pQty" placeholder="Cantitate" inputmode="decimal">
+        <button class="btn btn-blue" onclick="confirmSave()">ADĂUGĂ</button>
+        <button class="btn" style="background:#eee" onclick="closePopup()">ÎNAPOI</button>
     </div>
 
 <script>
-    let masterData = [];
-    let inventoryLogs = [];
-    let selectedProd = null;
-    let currentArea = "";
+    let db = []; let logs = []; let currentItem = null;
 
-    function initApp(input) {
+    function processExcel(input) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-            masterData = [];
-            const areaBtnContainer = document.getElementById('areaButtons');
-            areaBtnContainer.innerHTML = "";
+            db = [];
+            const container = document.getElementById('areaButtons');
+            container.innerHTML = "";
 
             wb.SheetNames.forEach(name => {
-                if(name.includes("Summary")) return;
+                if(name.toLowerCase().includes("summary") || name.toLowerCase().includes("wastage")) return;
                 
-                // Generăm butoane pentru fiecare foaie (Arie) din Excel
-                let btn = document.createElement('button');
-                btn.className = 'btn btn-area';
-                btn.innerText = name;
-                btn.onclick = () => filterByArea(name, btn);
-                areaBtnContainer.appendChild(btn);
+                // Adaugă buton pentru arie
+                let b = document.createElement('button');
+                b.className = 'btn btn-area';
+                b.innerText = name;
+                b.onclick = () => filterBySheet(name, b);
+                container.appendChild(b);
 
-                let rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {defval: ""});
-                rows.forEach(r => {
-                    if(r["PRODUCT"]) masterData.push({
-                        code: r["PRODUCT CODE"] || "N/A",
-                        name: r["PRODUCT"],
-                        area: name
-                    });
-                });
+                // Extrage datele
+                let sheet = wb.Sheets[name];
+                let rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
+                
+                // Căutăm coloana cu numele produsului (căutăm în primele 10 rânduri rândul cu titluri)
+                let headerIdx = 0;
+                let prodCol = -1;
+                let codeCol = -1;
+
+                for(let i=0; i<Math.min(rows.length, 10); i++){
+                    let row = rows[i];
+                    for(let j=0; j<row.length; j++){
+                        let val = String(row[j]).toUpperCase();
+                        if(val.includes("PRODUCT") || val.includes("DESCRIPTION")) { prodCol = j; headerIdx = i; }
+                        if(val.includes("CODE")) codeCol = j;
+                    }
+                    if(prodCol !== -1) break;
+                }
+
+                // Dacă am găsit coloana, adăugăm datele
+                if(prodCol !== -1) {
+                    for(let k = headerIdx + 1; k < rows.length; k++){
+                        let r = rows[k];
+                        if(r[prodCol]) {
+                            db.push({
+                                code: codeCol !== -1 ? r[codeCol] : "N/A",
+                                name: r[prodCol],
+                                area: name
+                            });
+                        }
+                    }
+                }
             });
             document.getElementById('startBtn').style.display = 'block';
-            alert("Excel încărcat! Butoanele pentru arii au fost create.");
+            alert("Gata! Fișierul a fost citit. Apasă butonul albastru.");
         };
         reader.readAsArrayBuffer(input.files[0]);
     }
 
-    function startWork() {
-        if(!document.getElementById('loc').value) return alert("Alege locația!");
-        document.getElementById('setup').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
+    function showApp() { 
+        document.getElementById('setup').style.display = 'none'; 
+        document.getElementById('app').style.display = 'block'; 
     }
 
-    function filterByArea(areaName, btnElement) {
-        currentArea = areaName;
-        document.querySelectorAll('.btn-area').forEach(b => b.classList.remove('area-active'));
-        btnElement.classList.add('area-active');
-        
-        const hits = masterData.filter(p => p.area === areaName);
-        displayResults(hits);
+    function filterBySheet(name, btn) {
+        document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('area-active'));
+        btn.classList.add('area-active');
+        let filtered = db.filter(x => x.area === name);
+        renderList(filtered);
     }
 
-    function search() {
-        let term = document.getElementById('search').value.toLowerCase();
-        if(term.length < 2) return;
-        const hits = masterData.filter(p => p.name.toLowerCase().includes(term));
-        displayResults(hits);
+    function manualSearch() {
+        let t = document.getElementById('search').value.toLowerCase();
+        if(t.length < 2) return;
+        renderList(db.filter(x => x.name.toLowerCase().includes(t)));
     }
 
-    function displayResults(items) {
+    function renderList(items) {
         let div = document.getElementById('results');
-        div.innerHTML = items.map(p => `
-            <div class="res-item" onclick="openEntry('${p.code}','${p.name.replace(/'/g,"")}','${p.area}')">
-                <span><b>${p.name}</b><br><small>${p.area}</small></span>
-                <span class="qty-badge">+</span>
+        div.innerHTML = items.map(i => `
+            <div class="res-item" onclick="askQty('${i.code}','${i.name.replace(/'/g,"")}','${i.area}')">
+                <span><b>${i.name}</b><br><small>${i.area} | ${i.code}</small></span>
+                <span style="color:#1a73e8; font-weight:bold;">+</span>
             </div>
         `).join('');
     }
 
-    function openEntry(code, name, area) {
-        selectedProd = { code, name, area };
-        document.getElementById('targetProd').innerText = name;
-        document.getElementById('targetInfo').innerText = "Aria: " + area + " | Cod: " + code;
-        document.getElementById('entry').style.display = 'block';
-        document.getElementById('qty').focus();
+    function askQty(code, name, area) {
+        currentItem = { code, name, area };
+        document.getElementById('pName').innerText = name;
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('entry-popup').style.display = 'block';
+        document.getElementById('pQty').focus();
     }
 
-    function save() {
-        let q = document.getElementById('qty').value;
+    function confirmSave() {
+        let q = document.getElementById('pQty').value;
         if(!q) return;
-        inventoryLogs.push({
-            Operator: document.getElementById('worker').value,
-            Locatie_Fizica: document.getElementById('loc').value,
-            Arie_Excel: selectedProd.area,
-            Cod_Produs: selectedProd.code,
-            Nume_Produs: selectedProd.name,
-            Cantitate: q,
-            Ora: new Date().toLocaleTimeString()
+        logs.push({
+            Locatie: document.getElementById('loc').value,
+            Arie: currentItem.area,
+            Cod: currentItem.code,
+            Produs: currentItem.name,
+            Cantitate: q
         });
-        closeEntry();
-        alert("Salvat: " + q + " x " + selectedProd.name);
+        closePopup();
+        alert("Salvat: " + currentItem.name);
     }
 
-    function closeEntry() {
-        document.getElementById('entry').style.display = 'none';
-        document.getElementById('qty').value = "";
+    function closePopup() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('entry-popup').style.display = 'none';
+        document.getElementById('pQty').value = "";
     }
 
-    function finish() {
-        if(inventoryLogs.length === 0) return alert("Nu ai date de salvat!");
-        
-        // Cream un nou fisier Excel
-        const ws = XLSX.utils.json_to_sheet(inventoryLogs);
+    function exportExcel() {
+        if(logs.length === 0) return alert("Nu ai salvat nimic!");
+        const ws = XLSX.utils.json_to_sheet(logs);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Stoc Final");
-        
-        // Generam fisierul
-        const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
-        function s2ab(s) {
-            const buf = new ArrayBuffer(s.length);
-            const view = new Uint8Array(buf);
-            for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
-            return buf;
-        }
-
-        const blob = new Blob([s2ab(wbout)], {type:"application/octet-stream"});
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "Stoc_" + document.getElementById('worker').value + ".xlsx";
-        a.click();
-        
-        alert("Fișierul Excel a fost descărcat. Acum îl poți trimite pe WhatsApp către Liz!");
+        XLSX.utils.book_append_sheet(wb, ws, "Rezultat");
+        XLSX.writeFile(wb, "Stoc_Final.xlsx");
     }
 </script>
 </body>
