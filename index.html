@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Fixed Names</title>
+    <title>Liz Stock Take - Final Name Fix</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -20,8 +20,8 @@
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
         .prod-info { display: flex; flex-direction: column; flex: 1; text-align: left; }
-        .prod-name { font-weight: bold; font-size: 16px; color: #1a73e8; margin-bottom: 2px; text-transform: capitalize; }
-        .prod-meta { font-size: 12px; color: #666; }
+        .prod-name { font-weight: bold; font-size: 17px; color: #1a73e8; margin-bottom: 2px; }
+        .prod-meta { font-size: 12px; color: #666; font-weight: normal; }
         #popup, #scan-container { position: fixed; top: 10%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
         video { width: 100%; border-radius: 10px; background: #000; }
@@ -32,6 +32,7 @@
 <div id="setup-screen" class="card">
     <h3>Step 1: Details</h3>
     <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
+    <p style="font-size: 12px; color: #666;">Upload Master File:</p>
     <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
     <button id="startButton" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
 </div>
@@ -40,7 +41,7 @@
     <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
     <div id="area-buttons" class="card" style="text-align:center"></div>
     <div class="search-container">
-        <input type="text" id="searchInput" placeholder="Search product..." oninput="handleSearch()">
+        <input type="text" id="searchInput" placeholder="Search by name..." oninput="handleSearch()">
     </div>
     <div id="results"></div>
 </div>
@@ -78,13 +79,16 @@ function processFile(input) {
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws);
             rows.forEach(r => {
-                // FORCE: Căutăm coloana "Produs" exact cum e în poza ta
-                let nameFound = r.Produs || r.Product || r.Description || "";
-                // Codul intern/EAN din restul coloanelor
-                let codeFound = r.Code || r.Cod || r.Barcode || r.EAN || "";
+                // EXTRACȚIE STRICTĂ:
+                // 1. Căutăm coloana care se numește exact "Produs" sau "Product" sau "Description"
+                let realName = r["Produs"] || r["Product"] || r["Description"] || "";
                 
-                if(nameFound) {
-                    masterData.push({ n: String(nameFound), c: String(codeFound), a: name });
+                // 2. Căutăm codul (orice altceva care nu e numele și e în coloanele Cod/Code)
+                let realCode = r["Cod"] || r["Code"] || r["Barcode"] || "";
+
+                // Dacă am găsit un nume, îl adăugăm
+                if(realName && String(realName).length > 2) {
+                    masterData.push({ n: String(realName), c: String(realCode), a: name });
                 }
             });
         });
@@ -123,11 +127,11 @@ function handleSearch() {
 
 function renderList(list) {
     let div = document.getElementById('results');
-    div.innerHTML = list.slice(0, 50).map(i => `
+    div.innerHTML = list.slice(0, 70).map(i => `
         <div class="item" onclick="openInput('${i.n.replace(/'/g,"")}','${i.a}')">
             <div class="prod-info">
                 <span class="prod-name">${i.n}</span>
-                <span class="prod-meta">Code: ${i.c || 'N/A'} | ${i.a}</span>
+                <span class="prod-meta">${i.a} ${i.c ? '| Code: ' + i.c : ''}</span>
             </div>
             <span style="color:#1a73e8; font-weight:bold; font-size: 18px;">${logs[i.n] ? logs[i.n].q : '+'}</span>
         </div>
@@ -136,7 +140,7 @@ function renderList(list) {
 
 function openInput(name, area) {
     activeItem = { n: name, a: area };
-    document.getElementById('prodNameDisplay').innerText = name + (logs[name] ? " (Current Total: " + logs[name].q + ")" : "");
+    document.getElementById('prodNameDisplay').innerText = name;
     document.getElementById('overlay').style.display = "block";
     document.getElementById('popup').style.display = "block";
     setTimeout(() => document.getElementById('prodQty').focus(), 150);
@@ -151,27 +155,4 @@ function saveEntry() {
 
 function closePopup() {
     document.getElementById('overlay').style.display = "none";
-    document.getElementById('popup').style.display = "none";
-    document.getElementById('scan-container').style.display = "none";
-    document.getElementById('prodQty').value = "";
-    codeReader.reset();
-}
-
-function exportExcel() {
-    const keys = Object.keys(logs);
-    const name = document.getElementById('userName').value;
-    const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Total_Qty: logs[k].q }));
-    const ws = XLSX.utils.json_to_sheet(finalData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Stock");
-    XLSX.writeFile(wb, `Inventory_${name}.xlsx`);
-}
-
-function filterByArea(areaName, btnElement) {
-    document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
-    btnElement.classList.add('active'); 
-    renderList(masterData.filter(x => x.a === areaName));
-}
-</script>
-</body>
-</html>
+    document.getElementById('popup
