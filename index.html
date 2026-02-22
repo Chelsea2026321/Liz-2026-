@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Voice & Scan Fixed</title>
+    <title>Liz Stock Take - Filter Fixed</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -14,11 +14,11 @@
         .btn-scan { background: #673ab7; color: white; margin-bottom: 15px; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .btn-mic { background: #ea4335; color: white; width: 55px; border-radius: 8px; font-size: 22px; border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 10px; width: calc(100% - 20px); z-index: 100; height: 60px; font-size: 18px; }
-        .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 47%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; vertical-align: top; }
+        .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 47%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; vertical-align: top; text-transform: uppercase; }
         .active { background: #1a73e8 !important; color: white !important; }
         .search-row { display: flex; gap: 8px; margin: 10px 0; align-items: stretch; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        #results { margin-top: 15px; padding-bottom: 110px; }
+        #results { margin-top: 15px; padding-bottom: 110px; min-height: 200px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .prod-info { text-align: left; flex: 1; }
         .prod-name { font-weight: bold; font-size: 16px; color: #1a73e8; display: block; }
@@ -32,10 +32,10 @@
 
 <div id="setup-screen" class="card">
     <h3>Step 1: Details</h3>
-    <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
-    <p style="font-size: 12px; color: #666;">Upload Master File:</p>
+    <input type="text" id="userName" placeholder="Your Name">
+    <p style="font-size: 12px; color: #666; margin-top:10px;">Upload Master File:</p>
     <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
-    <button id="startButton" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
+    <button id="startButton" class="btn btn-blue" style="display:none; margin-top:15px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
 </div>
 
 <div id="main-app" style="display:none">
@@ -43,7 +43,7 @@
     <div id="area-buttons" class="card" style="text-align:center"></div>
     
     <div class="search-row">
-        <input type="text" id="searchInput" placeholder="Search by name or code..." oninput="handleSearch()">
+        <input type="text" id="searchInput" placeholder="Search product..." oninput="handleSearch()">
         <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
     
@@ -66,7 +66,7 @@
 <button id="downloadBtn" class="btn btn-green" style="display:none" onclick="exportExcel()">💾 DOWNLOAD FINAL FILE</button>
 
 <script>
-let masterData = []; let logs = {}; let activeItem = null;
+let masterData = []; let logs = {}; let activeItem = null; let currentFilter = "";
 const codeReader = new ZXing.BrowserMultiFormatReader();
 
 function processFile(input) {
@@ -79,15 +79,20 @@ function processFile(input) {
         
         wb.SheetNames.forEach(name => {
             if(name.toLowerCase().includes("summary")) return;
-            let b = document.createElement('button'); b.className = 'btn btn-area'; b.innerText = name;
-            b.onclick = () => filterByArea(name, b); btnContainer.appendChild(b);
+            
+            let b = document.createElement('button'); 
+            b.className = 'btn btn-area'; 
+            b.innerText = name;
+            b.onclick = () => filterByArea(name, b); 
+            btnContainer.appendChild(b);
+            
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws);
             rows.forEach(r => {
                 let nameFound = r["Produs"] || r["Product"] || r["Description"] || "";
                 let codeFound = r["Cod"] || r["Code"] || r["Barcode"] || "";
                 if(nameFound) {
-                    masterData.push({ n: String(nameFound), c: String(codeFound), a: name });
+                    masterData.push({ n: String(nameFound).trim(), c: String(codeFound).trim(), a: name.trim() });
                 }
             });
         });
@@ -101,6 +106,60 @@ function goToApp() {
     document.getElementById('setup-screen').style.display = "none";
     document.getElementById('main-app').style.display = "block";
     document.getElementById('downloadBtn').style.display = "block";
+}
+
+function filterByArea(areaName, btnElement) {
+    document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
+    btnElement.classList.add('active'); 
+    currentFilter = areaName.trim();
+    document.getElementById('searchInput').value = ""; // Reset search when changing category
+    renderList(masterData.filter(x => x.a === currentFilter));
+}
+
+function handleSearch() {
+    let term = document.getElementById('searchInput').value.toLowerCase();
+    let baseList = currentFilter ? masterData.filter(x => x.a === currentFilter) : masterData;
+    renderList(baseList.filter(x => x.n.toLowerCase().includes(term) || x.c.toLowerCase().includes(term)));
+}
+
+function renderList(list) {
+    let div = document.getElementById('results');
+    if(list.length === 0) {
+        div.innerHTML = "<p style='text-align:center; color:gray;'>No products found in this category.</p>";
+        return;
+    }
+    div.innerHTML = list.slice(0, 100).map(i => `
+        <div class="item" onclick="openInput('${i.n.replace(/'/g,"\\'")}', '${i.a}')">
+            <div class="prod-info">
+                <span class="prod-name">${i.n}</span>
+                <span class="prod-meta">Code: ${i.c || '-'} | ${i.a}</span>
+            </div>
+            <span style="font-weight:bold; color:#1a73e8; font-size:18px;">${logs[i.n] ? logs[i.n].q : '+'}</span>
+        </div>
+    `).join('');
+}
+
+function openInput(name, area) {
+    activeItem = { n: name, a: area };
+    document.getElementById('prodNameDisplay').innerText = name;
+    document.getElementById('overlay').style.display = "block";
+    document.getElementById('popup').style.display = "block";
+    setTimeout(() => document.getElementById('prodQty').focus(), 150);
+}
+
+function saveEntry() {
+    let q = parseFloat(document.getElementById('prodQty').value);
+    if(isNaN(q)) return;
+    if(logs[activeItem.n]) { logs[activeItem.n].q += q; } else { logs[activeItem.n] = { a: activeItem.a, q: q }; }
+    handleSearch(); closePopup();
+}
+
+function closePopup() {
+    document.getElementById('overlay').style.display = "none";
+    document.getElementById('popup').style.display = "none";
+    document.getElementById('scan-container').style.display = "none";
+    document.getElementById('prodQty').value = "";
+    codeReader.reset();
 }
 
 function startScan() {
@@ -119,49 +178,9 @@ function startScan() {
 
 function stopScan() { codeReader.reset(); document.getElementById('scan-container').style.display = "none"; document.getElementById('overlay').style.display = "none"; }
 
-function handleSearch() {
-    let term = document.getElementById('searchInput').value.toLowerCase();
-    renderList(masterData.filter(x => x.n.toLowerCase().includes(term) || x.c.toLowerCase().includes(term)));
-}
-
-function renderList(list) {
-    let div = document.getElementById('results');
-    div.innerHTML = list.slice(0, 80).map(i => `
-        <div class="item" onclick="openInput('${i.n.replace(/'/g,"")}','${i.a}')">
-            <div class="prod-info">
-                <span class="prod-name">${i.n}</span>
-                <span class="prod-meta">Code: ${i.c} | ${i.a}</span>
-            </div>
-            <span style="font-weight:bold; color:#1a73e8;">${logs[i.n] ? logs[i.n].q : '+'}</span>
-        </div>
-    `).join('');
-}
-
-function openInput(name, area) {
-    activeItem = { n: name, a: area };
-    document.getElementById('prodNameDisplay').innerText = name;
-    document.getElementById('overlay').style.display = "block";
-    document.getElementById('popup').style.display = "block";
-    setTimeout(() => document.getElementById('prodQty').focus(), 100);
-}
-
-function saveEntry() {
-    let q = parseFloat(document.getElementById('prodQty').value);
-    if(isNaN(q)) return;
-    if(logs[activeItem.n]) { logs[activeItem.n].q += q; } else { logs[activeItem.n] = { a: activeItem.a, q: q }; }
-    handleSearch(); closePopup();
-}
-
-function closePopup() {
-    document.getElementById('overlay').style.display = "none";
-    document.getElementById('popup').style.display = "none";
-    document.getElementById('scan-container').style.display = "none";
-    document.getElementById('prodQty').value = "";
-    codeReader.reset();
-}
-
 function exportExcel() {
     const keys = Object.keys(logs);
+    if(keys.length === 0) return alert("No data!");
     const name = document.getElementById('userName').value;
     const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Qty: logs[k].q }));
     const ws = XLSX.utils.json_to_sheet(finalData);
@@ -170,15 +189,9 @@ function exportExcel() {
     XLSX.writeFile(wb, `Inventory_${name}.xlsx`);
 }
 
-function filterByArea(areaName, btnElement) {
-    document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
-    btnElement.classList.add('active'); 
-    renderList(masterData.filter(x => x.a === areaName));
-}
-
 function runVoice() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) return alert("Voice not supported on this device.");
+    if (!window.SpeechRecognition) return alert("Voice not supported.");
     const rec = new SpeechRecognition(); rec.lang = 'en-US';
     rec.onresult = (e) => { 
         document.getElementById('searchInput').value = e.results[0][0].transcript; 
