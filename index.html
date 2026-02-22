@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Stock Take - Hybrid Version</title>
+    <title>Liz Stock Take - Hybrid Final</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -39,9 +39,7 @@
 <div id="main-app" style="display:none">
     <div id="status-bar">Items counted: 0</div>
     <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
-    
     <div id="area-buttons" class="card" style="text-align:center"></div>
-    
     <div class="search-container">
         <input type="text" id="searchInput" placeholder="Search by name or code..." oninput="handleSearch()">
         <button class="btn-mic" onclick="runVoice()">🎤</button>
@@ -82,9 +80,10 @@ function processFile(input) {
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws);
             rows.forEach(r => {
-                let n = r.Name || r.Product || r.Description || Object.values(r)[0];
-                let c = r.Code || r.Barcode || r.EAN || "";
-                if(n) masterData.push({ n: String(n), c: String(c), a: name });
+                // FIXED: Prioritizing "Produs" column name from your Excel
+                let n = r.Produs || r.Product || r.Name || r.Description || Object.values(r)[0];
+                let c = r.Code || r.Barcode || r.EAN || r.Cod || "";
+                if(n && n !== "Produs") masterData.push({ n: String(n), c: String(c), a: name });
             });
         });
         document.getElementById('startButton').style.display = "block";
@@ -114,11 +113,7 @@ function startScan() {
     });
 }
 
-function stopScan() {
-    codeReader.reset();
-    document.getElementById('scan-container').style.display = "none";
-    document.getElementById('overlay').style.display = "none";
-}
+function stopScan() { codeReader.reset(); document.getElementById('scan-container').style.display = "none"; document.getElementById('overlay').style.display = "none"; }
 
 function handleSearch() {
     let term = document.getElementById('searchInput').value.toLowerCase();
@@ -137,7 +132,7 @@ function renderList(list) {
 
 function openInput(name, area) {
     activeItem = { n: name, a: area };
-    document.getElementById('prodName').innerText = name + (logs[name] ? " (Current Total: " + logs[name].q + ")" : "");
+    document.getElementById('prodName').innerText = name + (logs[name] ? " (Total: " + logs[name].q + ")" : "");
     document.getElementById('overlay').style.display = "block";
     document.getElementById('popup').style.display = "block";
     setTimeout(() => document.getElementById('prodQty').focus(), 150);
@@ -148,42 +143,10 @@ function saveEntry() {
     if(isNaN(q)) return;
     if(logs[activeItem.n]) { logs[activeItem.n].q += q; } else { logs[activeItem.n] = { a: activeItem.a, q: q }; }
     document.getElementById('status-bar').innerText = "Items counted: " + Object.keys(logs).length;
-    handleSearch();
-    closePopup();
+    handleSearch(); closePopup();
 }
 
 function closePopup() {
     document.getElementById('overlay').style.display = "none";
     document.getElementById('popup').style.display = "none";
-    document.getElementById('scan-container').style.display = "none";
-    document.getElementById('prodQty').value = "";
-    codeReader.reset();
-}
-
-function exportExcel() {
-    const keys = Object.keys(logs);
-    if(keys.length === 0) return alert("No data recorded!");
-    const name = document.getElementById('userName').value;
-    const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Total_Qty: logs[k].q }));
-    const ws = XLSX.utils.json_to_sheet(finalData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Stock");
-    XLSX.writeFile(wb, `Inventory_${name}.xlsx`);
-}
-
-function filterByArea(areaName, btnElement) {
-    document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
-    btnElement.classList.add('active'); 
-    renderList(masterData.filter(x => x.a === areaName));
-}
-
-function runVoice() {
-    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) return alert("Voice search not supported.");
-    const rec = new SpeechRecognition(); rec.lang = 'en-US';
-    rec.onresult = (e) => { document.getElementById('searchInput').value = e.results[0][0].transcript; handleSearch(); };
-    rec.start();
-}
-</script>
-</body>
-</html>
+    document.getElementById('scan-container').style.display = "
