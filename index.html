@@ -16,17 +16,15 @@
         .btn-area { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 48%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; vertical-align: top; }
         .active { background: #1a73e8 !important; color: white !important; }
         .search-container { display: flex; gap: 8px; margin: 10px 0; }
-        .btn-mic { background: #ea4335; color: white; width: 60px; border-radius: 8px; font-size: 24px; border: none; display: flex; align-items: center; justify-content: center; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; }
-        .prod-info { display: flex; flex-direction: column; flex: 1; }
-        .prod-name { font-weight: bold; font-size: 15px; color: #333; margin-bottom: 2px; }
-        .prod-meta { font-size: 11px; color: #666; }
+        .prod-info { display: flex; flex-direction: column; flex: 1; text-align: left; }
+        .prod-name { font-weight: bold; font-size: 16px; color: #1a73e8; margin-bottom: 2px; text-transform: capitalize; }
+        .prod-meta { font-size: 12px; color: #666; }
         #popup, #scan-container { position: fixed; top: 10%; left: 5%; width: 90%; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 0 40px rgba(0,0,0,0.5); z-index: 1001; display: none; box-sizing: border-box; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: none; }
         video { width: 100%; border-radius: 10px; background: #000; }
-        #status-bar { text-align: center; color: #34a853; font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -34,18 +32,15 @@
 <div id="setup-screen" class="card">
     <h3>Step 1: Details</h3>
     <input type="text" id="userName" placeholder="Your Name" style="margin-bottom:10px;">
-    <p style="font-size: 12px; color: #666; margin-bottom: 5px;">Upload Master File:</p>
     <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
     <button id="startButton" class="btn btn-blue" style="display:none; margin-top:10px;" onclick="goToApp()">OPEN PRODUCT LIST</button>
 </div>
 
 <div id="main-app" style="display:none">
-    <div id="status-bar">Items counted: 0</div>
     <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
     <div id="area-buttons" class="card" style="text-align:center"></div>
     <div class="search-container">
         <input type="text" id="searchInput" placeholder="Search product..." oninput="handleSearch()">
-        <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
     <div id="results"></div>
 </div>
@@ -83,14 +78,13 @@ function processFile(input) {
             let ws = wb.Sheets[name];
             let rows = XLSX.utils.sheet_to_json(ws);
             rows.forEach(r => {
-                let values = Object.values(r).map(v => String(v).trim());
-                // Identificăm denumirea: cel mai lung text care nu e doar cifre
-                let nameFound = values.find(v => v.length > 3 && isNaN(v)) || "Unknown Product";
-                // Identificăm codul: o valoare scurtă sau care conține cifre, diferită de nume
-                let codeFound = values.find(v => v !== nameFound && (v.length > 3 || !isNaN(v))) || "";
+                // FORCE: Căutăm coloana "Produs" exact cum e în poza ta
+                let nameFound = r.Produs || r.Product || r.Description || "";
+                // Codul intern/EAN din restul coloanelor
+                let codeFound = r.Code || r.Cod || r.Barcode || r.EAN || "";
                 
-                if(nameFound && nameFound !== "Produs" && nameFound !== "Product") {
-                    masterData.push({ n: nameFound, c: codeFound, a: name });
+                if(nameFound) {
+                    masterData.push({ n: String(nameFound), c: String(codeFound), a: name });
                 }
             });
         });
@@ -112,10 +106,9 @@ function startScan() {
     codeReader.decodeFromVideoDevice(null, 'video', (result) => {
         if (result) {
             stopScan();
-            let code = result.text;
-            document.getElementById('searchInput').value = code;
+            document.getElementById('searchInput').value = result.text;
             handleSearch();
-            let found = masterData.find(x => x.c == code);
+            let found = masterData.find(x => x.c == result.text);
             if(found) openInput(found.n, found.a);
         }
     });
@@ -134,7 +127,7 @@ function renderList(list) {
         <div class="item" onclick="openInput('${i.n.replace(/'/g,"")}','${i.a}')">
             <div class="prod-info">
                 <span class="prod-name">${i.n}</span>
-                <span class="prod-meta">${i.a} ${i.c ? ' | Code: ' + i.c : ''}</span>
+                <span class="prod-meta">Code: ${i.c || 'N/A'} | ${i.a}</span>
             </div>
             <span style="color:#1a73e8; font-weight:bold; font-size: 18px;">${logs[i.n] ? logs[i.n].q : '+'}</span>
         </div>
@@ -153,7 +146,6 @@ function saveEntry() {
     let q = parseFloat(document.getElementById('prodQty').value);
     if(isNaN(q)) return;
     if(logs[activeItem.n]) { logs[activeItem.n].q += q; } else { logs[activeItem.n] = { a: activeItem.a, q: q }; }
-    document.getElementById('status-bar').innerText = "Items counted: " + Object.keys(logs).length;
     handleSearch(); closePopup();
 }
 
@@ -167,7 +159,6 @@ function closePopup() {
 
 function exportExcel() {
     const keys = Object.keys(logs);
-    if(keys.length === 0) return alert("No data!");
     const name = document.getElementById('userName').value;
     const finalData = keys.map(k => ({ Staff: name, Area: logs[k].a, Product: k, Total_Qty: logs[k].q }));
     const ws = XLSX.utils.json_to_sheet(finalData);
@@ -180,13 +171,6 @@ function filterByArea(areaName, btnElement) {
     document.querySelectorAll('.btn-area').forEach(x => x.classList.remove('active'));
     btnElement.classList.add('active'); 
     renderList(masterData.filter(x => x.a === areaName));
-}
-
-function runVoice() {
-    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new SpeechRecognition(); rec.lang = 'en-US';
-    rec.onresult = (e) => { document.getElementById('searchInput').value = e.results[0][0].transcript; handleSearch(); };
-    rec.start();
 }
 </script>
 </body>
