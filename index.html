@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Inventory V8 - FULL</title>
+    <title>Liz Inventory V10 - UNIT FIX</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -20,6 +20,9 @@
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .prod-info { text-align: left; flex: 1; }
+        .prod-name { font-weight: bold; font-size: 15px; display: block; color: #1a73e8; }
+        .prod-unit { font-size: 12px; color: #e91e63; font-weight: bold; text-transform: uppercase; }
         #scan-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 2000; display: none; flex-direction: column; }
         video { width: 100%; height: 80%; object-fit: cover; }
     </style>
@@ -27,7 +30,7 @@
 <body>
 
 <div id="setup-screen" class="card">
-    <h2>Liz Inventory V8</h2>
+    <h2>Liz Inventory V10</h2>
     <input type="text" id="userName" placeholder="Numele tău">
     <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
     <div id="status" style="margin-top:10px; font-weight:bold; color:#34a853;"></div>
@@ -38,7 +41,7 @@
     <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
     <div id="area-buttons" class="card" style="text-align:center"></div>
     <div class="search-row">
-        <input type="text" id="searchInput" placeholder="Search..." oninput="renderList()">
+        <input type="text" id="searchInput" placeholder="Caută produs..." oninput="renderList()">
         <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
     <div id="results"></div>
@@ -49,7 +52,7 @@
     <button class="btn" style="background:red; color:white;" onclick="stopScan()">CLOSE</button>
 </div>
 
-<button id="downloadBtn" class="btn btn-green" style="display:none" onclick="exportExcel()">💾 DOWNLOAD FINAL FILE</button>
+<button id="downloadBtn" class="btn btn-green" style="display:none" onclick="exportExcel()">💾 DESCARCĂ EXCEL FINAL</button>
 
 <script>
 let masterData = []; let logs = {}; let currentArea = "";
@@ -62,6 +65,7 @@ function processFile(input) {
         masterData = [];
         const btnContainer = document.getElementById('area-buttons');
         btnContainer.innerHTML = "";
+        
         wb.SheetNames.forEach(sh => {
             if(sh.toLowerCase().includes("summary")) return;
             let b = document.createElement('button');
@@ -71,12 +75,26 @@ function processFile(input) {
                 b.classList.add('active'); currentArea = sh; renderList();
             };
             btnContainer.appendChild(b);
+
             let rows = XLSX.utils.sheet_to_json(wb.Sheets[sh], {header: 1});
             rows.forEach(r => {
-                let name = String(r[2] || r[1] || "").trim();
-                let code = String(r[1] || "").trim();
-                if(name.length > 2 && name.toLowerCase() !== "produs") {
-                    masterData.push({ n: name, c: code, a: sh });
+                let candidates = r.slice(0, 5).map(v => String(v || "").trim());
+                let unitKeywords = ["each", "case", "unit", "pack", "box", "kg", "bag"];
+                
+                // Găsim unitatea de măsură
+                let unit = candidates.find(c => unitKeywords.some(k => c.toLowerCase() === k)) || "";
+                
+                // Găsim numele (cel mai lung text care nu e unitate și nu e cod)
+                let name = candidates.reduce((a, b) => {
+                    let isUnit = unitKeywords.some(k => b.toLowerCase() === k);
+                    let isCode = /^\d+$/.test(b) && b.length > 5;
+                    return (!isUnit && !isCode && b.length > a.length) ? b : a;
+                }, "");
+
+                let code = String(r[1] || r[0] || "").trim();
+                
+                if(name.length > 2) {
+                    masterData.push({ n: name, u: unit, c: code, a: sh });
                 }
             });
         });
@@ -87,6 +105,7 @@ function processFile(input) {
 }
 
 function startApp() {
+    if(!document.getElementById('userName').value) return alert("Introdu numele!");
     document.getElementById('setup-screen').style.display = "none";
     document.getElementById('main-app').style.display = "block";
     document.getElementById('downloadBtn').style.display = "block";
@@ -96,17 +115,21 @@ function renderList() {
     let term = document.getElementById('searchInput').value.toLowerCase();
     let filtered = masterData.filter(x => x.a === currentArea && x.n.toLowerCase().includes(term));
     document.getElementById('results').innerHTML = filtered.map(i => `
-        <div class="item" onclick="addQty('${i.n.replace(/'/g, "\\'")}')">
-            <span>${i.n}</span>
-            <b style="color:#1a73e8">${logs[i.n] || '+'}</b>
+        <div class="item" onclick="addQty('${i.n.replace(/'/g, "\\'")}', '${i.u}')">
+            <div class="prod-info">
+                <span class="prod-name">${i.n}</span>
+                <span class="prod-unit">${i.u ? 'Unitate: ' + i.u : ''}</span>
+            </div>
+            <b style="color:#1a73e8; font-size: 20px;">${logs[i.n + (i.u || "")] || '+'}</b>
         </div>
     `).join('');
 }
 
-function addQty(n) {
-    let q = prompt("Quantity for " + n);
+function addQty(n, u) {
+    let key = n + (u || "");
+    let q = prompt("Introdu cantitatea pentru:\n" + n + (u ? " (" + u + ")" : ""));
     if(q !== null && !isNaN(q) && q !== "") {
-        logs[n] = (logs[n] || 0) + parseFloat(q);
+        logs[key] = (logs[key] || 0) + parseFloat(q);
         renderList();
     }
 }
@@ -117,8 +140,12 @@ function startScan() {
         if (result) {
             stopScan();
             let found = masterData.find(x => x.c == result.text);
-            if(found) { currentArea = found.a; renderList(); addQty(found.n); }
-            else alert("Not found: " + result.text);
+            if(found) { 
+                currentArea = found.a; 
+                renderList(); 
+                addQty(found.n, found.u); 
+            }
+            else alert("Cod necunoscut: " + result.text);
         }
     });
 }
@@ -133,11 +160,22 @@ function runVoice() {
 }
 
 function exportExcel() {
-    const data = Object.keys(logs).map(k => ({ Personal: document.getElementById('userName').value, Produs: k, Cantitate: logs[k] }));
+    const name = document.getElementById('userName').value;
+    const data = Object.keys(logs).map(k => {
+        // Căutăm produsul original pentru a-i lua numele curat și unitatea
+        let item = masterData.find(m => (m.n + (m.u || "")) === k);
+        return { 
+            Personal: name, 
+            Zona: item ? item.a : "",
+            Produs: item ? item.n : k, 
+            Unitate: item ? item.u : "",
+            Cantitate: logs[k] 
+        };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventar");
-    XLSX.writeFile(wb, "Inventar.xlsx");
+    XLSX.writeFile(wb, `Inventar_${name}.xlsx`);
 }
 </script>
 </body>
