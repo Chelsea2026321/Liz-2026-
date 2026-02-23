@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liz Inventory V11 - ULTIMATE FIX</title>
+    <title>Liz Inventory V8 - RESTORED</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -13,139 +13,132 @@
         .btn-scan { background: #673ab7; color: white; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; }
         .btn-mic { background: #ea4335; color: white; width: 55px; border-radius: 8px; font-size: 22px; border: none; display: flex; align-items: center; justify-content: center; }
         .btn-blue { background: #1a73e8; color: white; }
-        .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 10px; width: calc(100% - 20px); height: 60px; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); }
-        .area-btn { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 47%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; border-radius: 6px; }
+        .btn-green { background: #34a853; color: white; position: fixed; bottom: 10px; left: 10px; width: calc(100% - 20px); height: 60px; z-index: 100; }
+        .area-btn { background: white; border: 1px solid #1a73e8; color: #1a73e8; width: 47%; display: inline-block; font-size: 11px; min-height: 45px; margin: 1%; vertical-align: top; border-radius: 6px; }
         .active { background: #1a73e8 !important; color: white !important; }
         .search-row { display: flex; gap: 8px; margin: 10px 0; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         #results { margin-top: 15px; padding-bottom: 110px; }
         .item { padding: 15px; background: white; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #1a73e8; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .prod-name { font-weight: bold; font-size: 14px; color: #111; display: block; text-align: left; }
-        .prod-unit { font-size: 12px; color: #d81b60; font-weight: bold; display: block; margin-top: 4px; }
         #scan-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 2000; display: none; flex-direction: column; }
         video { width: 100%; height: 80%; object-fit: cover; }
     </style>
 </head>
 <body>
 
-<div id="setup" class="card">
-    <h2>Liz Inventory V11</h2>
-    <input type="text" id="user" placeholder="Numele tău">
-    <input type="file" id="file" accept=".xlsx" onchange="load(this)">
-    <div id="st" style="margin-top:10px; font-weight:bold; color:#34a853;"></div>
-    <button id="go" class="btn btn-blue" style="display:none" onclick="openApp()">DESCHIDE LISTA</button>
+<div id="setup-screen" class="card">
+    <h2>Liz Inventory V8</h2>
+    <input type="text" id="userName" placeholder="Numele tău">
+    <input type="file" id="fileInput" accept=".xlsx" onchange="processFile(this)">
+    <div id="status" style="margin-top:10px; font-weight:bold; color:#34a853;"></div>
+    <button id="startBtn" class="btn btn-blue" style="display:none" onclick="startApp()">START</button>
 </div>
 
-<div id="app" style="display:none">
-    <button class="btn btn-scan" onclick="startScan()">📷 SCANARE BARCOD</button>
-    <div id="cats" class="card" style="text-align:center"></div>
+<div id="main-app" style="display:none">
+    <button class="btn btn-scan" onclick="startScan()">📷 SCAN BARCODE</button>
+    <div id="area-buttons" class="card" style="text-align:center"></div>
     <div class="search-row">
-        <input type="text" id="q" placeholder="Caută produs..." oninput="draw()">
+        <input type="text" id="searchInput" placeholder="Search..." oninput="renderList()">
         <button class="btn-mic" onclick="runVoice()">🎤</button>
     </div>
-    <div id="list"></div>
+    <div id="results"></div>
 </div>
 
 <div id="scan-container">
     <video id="video"></video>
-    <button class="btn" style="background:red; color:white;" onclick="stopScan()">ÎNCHIDE</button>
+    <button class="btn" style="background:red; color:white;" onclick="stopScan()">CLOSE</button>
 </div>
 
-<button id="dl" class="btn btn-green" style="display:none" onclick="save()">💾 DESCARCĂ EXCEL FINAL</button>
+<button id="downloadBtn" class="btn btn-green" style="display:none" onclick="exportExcel()">💾 DOWNLOAD FINAL FILE</button>
 
 <script>
-let db = []; let log = {}; let cur = "";
-const reader = new ZXing.BrowserMultiFormatReader();
+let masterData = []; let logs = {}; let currentArea = "";
+const codeReader = new ZXing.BrowserMultiFormatReader();
 
-function load(input) {
-    const fr = new FileReader();
-    fr.onload = (e) => {
+function processFile(input) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
         const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-        db = [];
-        const cats = document.getElementById('cats');
-        cats.innerHTML = "";
-        
+        masterData = [];
+        const btnContainer = document.getElementById('area-buttons');
+        btnContainer.innerHTML = "";
         wb.SheetNames.forEach(sh => {
             if(sh.toLowerCase().includes("summary")) return;
-            let b = document.createElement('button'); b.className = 'area-btn'; b.innerText = sh;
-            b.onclick = () => { document.querySelectorAll('.area-btn').forEach(x => x.classList.remove('active')); b.classList.add('active'); cur = sh; draw(); };
-            cats.appendChild(b);
-
+            let b = document.createElement('button');
+            b.className = 'area-btn'; b.innerText = sh;
+            b.onclick = () => {
+                document.querySelectorAll('.area-btn').forEach(x => x.classList.remove('active'));
+                b.classList.add('active'); currentArea = sh; renderList();
+            };
+            btnContainer.appendChild(b);
             let rows = XLSX.utils.sheet_to_json(wb.Sheets[sh], {header: 1});
             rows.forEach(r => {
-                let cells = r.map(v => String(v || "").trim());
-                let unit = cells.find(c => ["each", "case", "unit", "pack", "bag", "kg", "box"].includes(c.toLowerCase())) || "";
-                let name = cells.reduce((a, b) => {
-                    let isU = ["each", "case", "unit", "pack", "bag", "kg", "box"].includes(b.toLowerCase());
-                    let isC = /^\d+$/.test(b) && b.length > 4;
-                    return (!isU && !isC && b.length > a.length && b.length < 100) ? b : a;
-                }, "");
-                let code = cells[1] || cells[0] || "";
-                if(name.length > 2) db.push({ n: name, u: unit, c: code, a: sh });
+                let name = String(r[2] || r[1] || "").trim();
+                let code = String(r[1] || "").trim();
+                if(name.length > 2 && name.toLowerCase() !== "produs") {
+                    masterData.push({ n: name, c: code, a: sh });
+                }
             });
         });
-        document.getElementById('st').innerText = "✅ " + db.length + " produse încărcate!";
-        document.getElementById('go').style.display = "block";
+        document.getElementById('status').innerText = "✅ " + masterData.length + " produse!";
+        document.getElementById('startBtn').style.display = "block";
     };
-    fr.readAsArrayBuffer(input.files[0]);
+    reader.readAsArrayBuffer(input.files[0]);
 }
 
-function openApp() {
-    if(!document.getElementById('user').value) return alert("Nume?");
-    document.getElementById('setup').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('dl').style.display = 'block';
+function startApp() {
+    document.getElementById('setup-screen').style.display = "none";
+    document.getElementById('main-app').style.display = "block";
+    document.getElementById('downloadBtn').style.display = "block";
 }
 
-function draw() {
-    let s = document.getElementById('q').value.toLowerCase();
-    let filtered = db.filter(x => x.a === cur && x.n.toLowerCase().includes(s));
-    document.getElementById('list').innerHTML = filtered.map(i => `
-        <div class="item" onclick="add('${i.n.replace(/'/g, "\\'")}', '${i.u}')">
-            <div style="text-align:left">
-                <span class="prod-name">${i.n}</span>
-                <span class="prod-unit">${i.u ? 'Unitate: ' + i.u : 'Fără unitate specificată'}</span>
-            </div>
-            <b style="color:#1a73e8; font-size:20px">${log[i.n + i.u] || '+'}</b>
+function renderList() {
+    let term = document.getElementById('searchInput').value.toLowerCase();
+    let filtered = masterData.filter(x => x.a === currentArea && x.n.toLowerCase().includes(term));
+    document.getElementById('results').innerHTML = filtered.map(i => `
+        <div class="item" onclick="addQty('${i.n.replace(/'/g, "\\'")}')">
+            <span>${i.n}</span>
+            <b style="color:#1a73e8">${logs[i.n] || '+'}</b>
         </div>
     `).join('');
 }
 
-function add(n, u) {
-    let k = n + u;
-    let v = prompt("Cantitate pentru:\n" + n + "\n(" + (u || "Each") + ")");
-    if(v !== null && !isNaN(v) && v !== "") { log[k] = (log[k] || 0) + parseFloat(v); draw(); }
+function addQty(n) {
+    let q = prompt("Quantity for " + n);
+    if(q !== null && !isNaN(q) && q !== "") {
+        logs[n] = (logs[n] || 0) + parseFloat(q);
+        renderList();
+    }
 }
 
 function startScan() {
     document.getElementById('scan-container').style.display = "flex";
-    reader.decodeFromVideoDevice(null, 'video', (res) => {
-        if (res) {
+    codeReader.decodeFromVideoDevice(null, 'video', (result) => {
+        if (result) {
             stopScan();
-            let f = db.find(x => x.c == res.text);
-            if(f) { cur = f.a; draw(); add(f.n, f.u); } else alert("Cod necunoscut: " + res.text);
+            let found = masterData.find(x => x.c == result.text);
+            if(found) { currentArea = found.a; renderList(); addQty(found.n); }
+            else alert("Not found: " + result.text);
         }
     });
 }
-function stopScan() { reader.reset(); document.getElementById('scan-container').style.display = "none"; }
+
+function stopScan() { codeReader.reset(); document.getElementById('scan-container').style.display = "none"; }
 
 function runVoice() {
-    const sr = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    sr.lang = 'en-US';
-    sr.onresult = (e) => { document.getElementById('q').value = e.results[0][0].transcript; draw(); };
-    sr.start();
+    const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    rec.lang = 'en-US';
+    rec.onresult = (e) => { document.getElementById('searchInput').value = e.results[0][0].transcript; renderList(); };
+    rec.start();
 }
 
-function save() {
-    const u = document.getElementById('user').value;
-    const data = Object.keys(log).map(k => {
-        let it = db.find(m => (m.n + m.u) === k);
-        return { Personal: u, Zona: it.a, Produs: it.n, Unitate: it.u, Cantitate: log[k] };
-    });
+function exportExcel() {
+    const name = document.getElementById('userName').value;
+    const data = Object.keys(logs).map(k => ({ Personal: name, Produs: k, Cantitate: logs[k] }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventar");
-    XLSX.writeFile(wb, `Inventar_${u}.xlsx`);
+    XLSX.writeFile(wb, `Inventar_${name}.xlsx`);
 }
 </script>
 </body>
